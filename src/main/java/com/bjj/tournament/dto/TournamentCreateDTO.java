@@ -16,52 +16,28 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TournamentCreateDTO {
-    
+
     @NotBlank(message = "Tournament name is required")
     @Size(min = 3, max = 200, message = "Tournament name must be between 3 and 200 characters")
     private String name;
-    
+
     @Size(max = 1000, message = "Description must be less than 1000 characters")
     private String description;
-    
+
     @NotBlank(message = "Location is required")
     @Size(max = 200, message = "Location must be less than 200 characters")
     private String location;
-    
+
     @NotNull(message = "Tournament date is required")
     private LocalDate tournamentDate;
-    
+
     private LocalDate registrationDeadline;
-    
+
     @Size(max = 100, message = "Organizer name must be less than 100 characters")
     private String organizer;
-    
+
     private String contactEmail;
-    
+
     @Size(max = 2000, message = "Rules must be less than 2000 characters")
     private String rules;
-}
-
-/**
- * DTO for tournament response
- */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-class TournamentResponseDTO {
-    
-    private Long id;
-    private String name;
-    private String description;
-    private String location;
-    private LocalDate tournamentDate;
-    private LocalDate registrationDeadline;
-    private Boolean registrationOpen;
-    private String organizer;
-    private String contactEmail;
-    private String rules;
-    private Boolean started;
-    private Boolean completed;
-    private Integer totalDivisions;
-    private Integer totalAthletes;
 }
