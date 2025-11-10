@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: bjj-tournament-db
+    environment:
+      POSTGRES_DB: bjj_tournament
+      POSTGRES_USER: bjj_user
+      POSTGRES_PASSWORD: bjj_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bjj-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bjj_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Spring Boot Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bjj-tournament-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bjj_tournament
+      SPRING_DATASOURCE_USERNAME: bjj_user
+      SPRING_DATASOURCE_PASSWORD: bjj_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bjj-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  bjj-network:
+    driver: bridge
