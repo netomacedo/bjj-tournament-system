@@ -1,4 +1,4 @@
-# BJJ Tournament Management System
+# BJJ Tournament Management System - Back-end
 
 A comprehensive Brazilian Jiu-Jitsu tournament management system based on IBJJF (International Brazilian Jiu-Jitsu Federation) rules. Built with Java Spring Boot backend and designed to integrate with React frontend.
 
