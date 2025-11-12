@@ -4,6 +4,7 @@ import com.bjj.tournament.dto.AthleteRegistrationDTO;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.enums.BeltRank;
 import com.bjj.tournament.enums.Gender;
+import com.bjj.tournament.exception.AthleteNotFoundException;
 import com.bjj.tournament.service.AthleteService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -147,11 +148,11 @@ class AthleteControllerTest {
     void testGetAthleteById_WhenNotExists_ShouldReturn404NotFound() throws Exception {
         // Given
         when(athleteService.getAthleteById(999L))
-            .thenThrow(new IllegalArgumentException("Athlete not found"));
+            .thenThrow(new AthleteNotFoundException("Athlete not found"));
         
         // When/Then
         mockMvc.perform(get("/api/athletes/999"))
-            .andExpect(status().isInternalServerError()); // Spring default behavior
+            .andExpect(status().isNotFound()); // Spring default behavior
         
         verify(athleteService, times(1)).getAthleteById(999L);
     }
@@ -250,12 +251,12 @@ class AthleteControllerTest {
     @Test
     void testDeleteAthlete_WhenNotExists_ShouldReturnError() throws Exception {
         // Given
-        doThrow(new IllegalArgumentException("Athlete not found"))
+        doThrow(new AthleteNotFoundException("Athlete not found"))
             .when(athleteService).deleteAthlete(999L);
         
         // When/Then
         mockMvc.perform(delete("/api/athletes/999"))
-            .andExpect(status().isInternalServerError());
+            .andExpect(status().isNotFound());
         
         verify(athleteService, times(1)).deleteAthlete(999L);
     }

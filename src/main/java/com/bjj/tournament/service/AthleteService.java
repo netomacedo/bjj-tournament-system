@@ -4,6 +4,7 @@ import com.bjj.tournament.dto.AthleteRegistrationDTO;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.enums.BeltRank;
 import com.bjj.tournament.enums.Gender;
+import com.bjj.tournament.exception.AthleteNotFoundException;
 import com.bjj.tournament.repository.AthleteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -91,7 +92,7 @@ public class AthleteService {
     @Transactional(readOnly = true)
     public Athlete getAthleteById(Long id) {
         return athleteRepository.findById(id)
-            .orElseThrow(() -> new IllegalArgumentException("Athlete not found with ID: " + id));
+            .orElseThrow(() -> new AthleteNotFoundException("Athlete not found with ID: " + id));
     }
     
     /**
@@ -191,7 +192,7 @@ public class AthleteService {
         log.info("Deleting athlete with ID: {}", id);
         
         if (!athleteRepository.existsById(id)) {
-            throw new IllegalArgumentException("Athlete not found with ID: " + id);
+            throw new AthleteNotFoundException("Athlete not found with ID: " + id);
         }
         
         athleteRepository.deleteById(id);

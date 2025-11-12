@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@ActiveProfiles("test") // Use 'test' profile for testing with H2 DB
 class TournamentApplicationIntegrationTest {
     
     @Autowired
@@ -200,7 +202,8 @@ class TournamentApplicationIntegrationTest {
         mockMvc.perform(post("/api/athletes")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(dto2)))
-            .andExpect(status().isInternalServerError()); // Business logic exception
+                .andExpect(status().isConflict()) // 409 - much better than 500!
+                .andExpect(jsonPath("$.message").value("Athlete with email athlete1@test.com already exists")); // Business logic exception
     }
     
     @Test

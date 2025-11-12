@@ -4,6 +4,7 @@ import com.bjj.tournament.dto.AthleteRegistrationDTO;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.enums.BeltRank;
 import com.bjj.tournament.enums.Gender;
+import com.bjj.tournament.exception.AthleteNotFoundException;
 import com.bjj.tournament.repository.AthleteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -100,7 +101,8 @@ class AthleteServiceTest {
         // Given
         validRegistrationDTO.setDateOfBirth(LocalDate.now().minusYears(8));
         validRegistrationDTO.setGender(null);
-        
+        validRegistrationDTO.setBeltRank(BeltRank.WHITE_GREY); // Kids belt
+
         when(athleteRepository.existsByEmail(anyString())).thenReturn(false);
         when(athleteRepository.save(any(Athlete.class))).thenAnswer(invocation -> {
             Athlete athlete = invocation.getArgument(0);
@@ -169,7 +171,7 @@ class AthleteServiceTest {
         
         // When/Then
         assertThatThrownBy(() -> athleteService.getAthleteById(999L))
-            .isInstanceOf(IllegalArgumentException.class)
+            .isInstanceOf(AthleteNotFoundException.class)
             .hasMessageContaining("not found");
         
         verify(athleteRepository, times(1)).findById(999L);
@@ -330,7 +332,7 @@ class AthleteServiceTest {
         
         // When/Then
         assertThatThrownBy(() -> athleteService.deleteAthlete(999L))
-            .isInstanceOf(IllegalArgumentException.class)
+            .isInstanceOf(AthleteNotFoundException.class)
             .hasMessageContaining("not found");
         
         verify(athleteRepository, times(1)).existsById(999L);
