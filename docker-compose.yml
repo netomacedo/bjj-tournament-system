@@ -16,7 +16,7 @@ services:
     networks:
       - bjj-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bjj_user"]
+      test: ["CMD-SHELL", "pg_isready -U bjj_user -d bjj_tournament"]
       interval: 10s
       timeout: 5s
       retries: 5

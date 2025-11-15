@@ -1,5 +1,6 @@
 package com.bjj.tournament.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -89,6 +90,7 @@ public class Tournament {
      * One-to-Many relationship: One tournament has many divisions
      */
     @OneToMany(mappedBy = "tournament", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<Division> divisions = new ArrayList<>();
     
     /**

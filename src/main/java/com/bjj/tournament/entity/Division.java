@@ -1,6 +1,7 @@
 package com.bjj.tournament.entity;
 
 import com.bjj.tournament.enums.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -40,6 +41,7 @@ public class Division {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tournament_id", nullable = false)
     @NotNull(message = "Tournament is required")
+    @JsonIgnore
     private Tournament tournament;
     
     /**
