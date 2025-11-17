@@ -2,10 +2,14 @@ package com.bjj.tournament.service;
 
 import com.bjj.tournament.dto.AthleteRegistrationDTO;
 import com.bjj.tournament.entity.Athlete;
+import com.bjj.tournament.entity.Division;
+import com.bjj.tournament.entity.Match;
 import com.bjj.tournament.enums.BeltRank;
 import com.bjj.tournament.enums.Gender;
 import com.bjj.tournament.exception.AthleteNotFoundException;
 import com.bjj.tournament.repository.AthleteRepository;
+import com.bjj.tournament.repository.DivisionRepository;
+import com.bjj.tournament.repository.MatchRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,8 +27,10 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class AthleteService {
-    
+
     private final AthleteRepository athleteRepository;
+    private final DivisionRepository divisionRepository;
+    private final MatchRepository matchRepository;
     
     /**
      * Register a new athlete for the tournament
@@ -186,16 +192,37 @@ public class AthleteService {
     
     /**
      * Delete athlete
+     * Removes athlete from all divisions before deletion
+     * Prevents deletion if athlete has matches
      */
     @Transactional
     public void deleteAthlete(Long id) {
         log.info("Deleting athlete with ID: {}", id);
-        
-        if (!athleteRepository.existsById(id)) {
-            throw new AthleteNotFoundException("Athlete not found with ID: " + id);
+
+        Athlete athlete = athleteRepository.findById(id)
+            .orElseThrow(() -> new AthleteNotFoundException("Athlete not found with ID: " + id));
+
+        // Check if athlete has any matches
+        List<Match> matches = matchRepository.findMatchesByAthleteId(id);
+        if (!matches.isEmpty()) {
+            throw new IllegalStateException(
+                "Cannot delete athlete with ID " + id + " because they have " + matches.size() +
+                " match(es). Please remove the athlete from all matches before deleting."
+            );
         }
-        
-        athleteRepository.deleteById(id);
+
+        // Remove athlete from all divisions they're enrolled in
+        List<Division> allDivisions = divisionRepository.findAll();
+        for (Division division : allDivisions) {
+            if (division.getAthletes().contains(athlete)) {
+                log.info("Removing athlete {} from division {}", id, division.getId());
+                division.removeAthlete(athlete);
+                divisionRepository.save(division);
+            }
+        }
+
+        // Delete the athlete
+        athleteRepository.delete(athlete);
         log.info("Successfully deleted athlete with ID: {}", id);
     }
 }

@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-class MatchResponseDTO {
+public class MatchResponseDTO {
 
     private Long id;
     private Long divisionId;

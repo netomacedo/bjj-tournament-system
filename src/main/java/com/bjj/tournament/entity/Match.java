@@ -1,6 +1,7 @@
 package com.bjj.tournament.entity;
 
 import com.bjj.tournament.enums.MatchStatus;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import lombok.AllArgsConstructor;
@@ -36,27 +37,31 @@ public class Match {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "division_id", nullable = false)
+    @JsonIgnore
     private Division division;
-    
+
     /**
      * First athlete (Blue corner in IBJJF)
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "athlete1_id")
+    @JsonIgnore
     private Athlete athlete1;
-    
+
     /**
      * Second athlete (White corner in IBJJF)
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "athlete2_id")
+    @JsonIgnore
     private Athlete athlete2;
-    
+
     /**
      * Winner of the match (set after match completion)
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "winner_id")
+    @JsonIgnore
     private Athlete winner;
     
     /**

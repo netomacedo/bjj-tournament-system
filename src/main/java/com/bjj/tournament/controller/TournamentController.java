@@ -1,11 +1,10 @@
 package com.bjj.tournament.controller;
 
+import com.bjj.tournament.dto.MatchResponseDTO;
 import com.bjj.tournament.dto.TournamentCreateDTO;
-import com.bjj.tournament.dto.MatchUpdateDTO;
 import com.bjj.tournament.entity.Tournament;
 import com.bjj.tournament.entity.Match;
 import com.bjj.tournament.service.TournamentService;
-import com.bjj.tournament.service.MatchService;
 import com.bjj.tournament.service.BracketService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * REST Controller for tournament operations
@@ -111,26 +111,32 @@ public class TournamentController {
      * POST /api/tournaments/divisions/{divisionId}/generate-matches
      */
     @PostMapping("/divisions/{divisionId}/generate-matches")
-    public ResponseEntity<List<Match>> generateMatches(@PathVariable Long divisionId) {
+    public ResponseEntity<List<MatchResponseDTO>> generateMatches(@PathVariable Long divisionId) {
         log.info("REST request to generate matches for division ID: {}", divisionId);
         List<Match> matches = bracketService.generateMatchesAutomatically(divisionId);
-        return ResponseEntity.ok(matches);
+        List<MatchResponseDTO> dtos = matches.stream()
+            .map(this::convertToDTO)
+            .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
-    
+
     /**
      * Generate matches manually for a division
      * POST /api/tournaments/divisions/{divisionId}/generate-matches-manual
      * Body: [[athlete1Id, athlete2Id], [athlete3Id, athlete4Id], ...]
      */
     @PostMapping("/divisions/{divisionId}/generate-matches-manual")
-    public ResponseEntity<List<Match>> generateMatchesManually(
+    public ResponseEntity<List<MatchResponseDTO>> generateMatchesManually(
             @PathVariable Long divisionId,
             @RequestBody List<long[]> matchPairs) {
         log.info("REST request to generate manual matches for division ID: {}", divisionId);
         List<Match> matches = bracketService.generateMatchesManually(divisionId, matchPairs);
-        return ResponseEntity.ok(matches);
+        List<MatchResponseDTO> dtos = matches.stream()
+            .map(this::convertToDTO)
+            .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
-    
+
     /**
      * Delete tournament
      * DELETE /api/tournaments/{id}
@@ -141,138 +147,57 @@ public class TournamentController {
         tournamentService.deleteTournament(id);
         return ResponseEntity.noContent().build();
     }
-}
 
-/**
- * REST Controller for match operations
- */
-@RestController
-@RequestMapping("/api/matches")
-@RequiredArgsConstructor
-@Slf4j
-@CrossOrigin(origins = "*")
-class MatchController {
-    
-    private final MatchService matchService;
-    
     /**
-     * Get match by ID
-     * GET /api/matches/{id}
+     * Convert Match entity to MatchResponseDTO
      */
-    @GetMapping("/{id}")
-    public ResponseEntity<Match> getMatchById(@PathVariable Long id) {
-        log.info("REST request to get match by ID: {}", id);
-        Match match = matchService.getMatchById(id);
-        return ResponseEntity.ok(match);
-    }
-    
-    /**
-     * Get all matches for a division
-     * GET /api/matches/division/{divisionId}
-     */
-    @GetMapping("/division/{divisionId}")
-    public ResponseEntity<List<Match>> getMatchesByDivision(@PathVariable Long divisionId) {
-        log.info("REST request to get matches for division ID: {}", divisionId);
-        List<Match> matches = matchService.getMatchesByDivision(divisionId);
-        return ResponseEntity.ok(matches);
-    }
-    
-    /**
-     * Get matches for a specific round in a division
-     * GET /api/matches/division/{divisionId}/round/{roundNumber}
-     */
-    @GetMapping("/division/{divisionId}/round/{roundNumber}")
-    public ResponseEntity<List<Match>> getMatchesByDivisionAndRound(
-            @PathVariable Long divisionId,
-            @PathVariable Integer roundNumber) {
-        log.info("REST request to get matches for division {} round {}", divisionId, roundNumber);
-        List<Match> matches = matchService.getMatchesByDivisionAndRound(divisionId, roundNumber);
-        return ResponseEntity.ok(matches);
-    }
-    
-    /**
-     * Get all matches for an athlete
-     * GET /api/matches/athlete/{athleteId}
-     */
-    @GetMapping("/athlete/{athleteId}")
-    public ResponseEntity<List<Match>> getMatchesByAthlete(@PathVariable Long athleteId) {
-        log.info("REST request to get matches for athlete ID: {}", athleteId);
-        List<Match> matches = matchService.getMatchesByAthlete(athleteId);
-        return ResponseEntity.ok(matches);
-    }
-    
-    /**
-     * Get pending matches for a division
-     * GET /api/matches/division/{divisionId}/pending
-     */
-    @GetMapping("/division/{divisionId}/pending")
-    public ResponseEntity<List<Match>> getPendingMatches(@PathVariable Long divisionId) {
-        log.info("REST request to get pending matches for division ID: {}", divisionId);
-        List<Match> matches = matchService.getPendingMatches(divisionId);
-        return ResponseEntity.ok(matches);
-    }
-    
-    /**
-     * Start a match
-     * POST /api/matches/{id}/start
-     */
-    @PostMapping("/{id}/start")
-    public ResponseEntity<Match> startMatch(@PathVariable Long id) {
-        log.info("REST request to start match ID: {}", id);
-        Match match = matchService.startMatch(id);
-        return ResponseEntity.ok(match);
-    }
-    
-    /**
-     * Update match scores and status
-     * PUT /api/matches/{id}
-     */
-    @PutMapping("/{id}")
-    public ResponseEntity<Match> updateMatch(
-            @PathVariable Long id,
-            @Valid @RequestBody MatchUpdateDTO updateDTO) {
-        log.info("REST request to update match ID: {}", id);
-        Match match = matchService.updateMatch(id, updateDTO);
-        return ResponseEntity.ok(match);
-    }
-    
-    /**
-     * Record a submission victory
-     * POST /api/matches/{id}/submission
-     */
-    @PostMapping("/{id}/submission")
-    public ResponseEntity<Match> recordSubmission(
-            @PathVariable Long id,
-            @RequestParam Long winnerId,
-            @RequestParam String submissionType) {
-        log.info("REST request to record submission for match ID: {}", id);
-        Match match = matchService.recordSubmission(id, winnerId, submissionType);
-        return ResponseEntity.ok(match);
-    }
-    
-    /**
-     * Record a walkover
-     * POST /api/matches/{id}/walkover
-     */
-    @PostMapping("/{id}/walkover")
-    public ResponseEntity<Match> recordWalkover(
-            @PathVariable Long id,
-            @RequestParam Long winnerId) {
-        log.info("REST request to record walkover for match ID: {}", id);
-        Match match = matchService.recordWalkover(id, winnerId);
-        return ResponseEntity.ok(match);
-    }
-    
-    /**
-     * Assign match to a mat/ring
-     * POST /api/matches/{id}/assign-mat
-     */
-    @PostMapping("/{id}/assign-mat")
-    public ResponseEntity<Match> assignToMat(
-            @PathVariable Long id,
-            @RequestParam Integer matNumber) {
-        log.info("REST request to assign match {} to mat {}", id, matNumber);
-        Match match = matchService.assignToMat(id, matNumber);
-        return ResponseEntity.ok(match);
+    private MatchResponseDTO convertToDTO(Match match) {
+        MatchResponseDTO dto = new MatchResponseDTO();
+
+        dto.setId(match.getId());
+        dto.setDivisionId(match.getDivision() != null ? match.getDivision().getId() : null);
+        dto.setDivisionName(match.getDivision() != null ? match.getDivision().getName() : null);
+
+        // Athlete 1 details
+        if (match.getAthlete1() != null) {
+            dto.setAthlete1Id(match.getAthlete1().getId());
+            dto.setAthlete1Name(match.getAthlete1().getName());
+            dto.setAthlete1Team(match.getAthlete1().getTeam());
+        }
+
+        // Athlete 2 details
+        if (match.getAthlete2() != null) {
+            dto.setAthlete2Id(match.getAthlete2().getId());
+            dto.setAthlete2Name(match.getAthlete2().getName());
+            dto.setAthlete2Team(match.getAthlete2().getTeam());
+        }
+
+        // Winner details
+        if (match.getWinner() != null) {
+            dto.setWinnerId(match.getWinner().getId());
+            dto.setWinnerName(match.getWinner().getName());
+        }
+
+        dto.setStatus(match.getStatus());
+        dto.setRoundNumber(match.getRoundNumber());
+        dto.setMatchPosition(match.getMatchPosition());
+        dto.setMatNumber(match.getMatNumber());
+
+        // Scores
+        dto.setAthlete1Points(match.getAthlete1Points());
+        dto.setAthlete2Points(match.getAthlete2Points());
+        dto.setAthlete1Advantages(match.getAthlete1Advantages());
+        dto.setAthlete2Advantages(match.getAthlete2Advantages());
+        dto.setAthlete1Penalties(match.getAthlete1Penalties());
+        dto.setAthlete2Penalties(match.getAthlete2Penalties());
+        dto.setAthlete1TotalScore(match.getAthlete1TotalScore());
+        dto.setAthlete2TotalScore(match.getAthlete2TotalScore());
+
+        dto.setFinishedBySubmission(match.getFinishedBySubmission());
+        dto.setSubmissionType(match.getSubmissionType());
+        dto.setDurationSeconds(match.getDurationSeconds());
+        dto.setNotes(match.getNotes());
+
+        return dto;
     }
 }

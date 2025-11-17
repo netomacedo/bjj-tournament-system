@@ -107,6 +107,7 @@ public class Division {
      * One-to-Many relationship: One division has many matches
      */
     @OneToMany(mappedBy = "division", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<Match> matches = new ArrayList<>();
     
     /**
