@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -30,7 +32,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Unit tests for MatchController
  * Tests REST API endpoints for match operations
  */
-@WebMvcTest(MatchController.class)
+@WebMvcTest(
+    controllers = MatchController.class,
+    excludeFilters = @ComponentScan.Filter(
+        type = FilterType.ASSIGNABLE_TYPE,
+        classes = {
+            com.bjj.tournament.security.JwtAuthenticationFilter.class,
+            com.bjj.tournament.security.JwtTokenProvider.class,
+            com.bjj.tournament.security.CustomUserDetailsService.class,
+            com.bjj.tournament.security.SecurityConfig.class
+        }
+    ),
+    excludeAutoConfiguration = {
+        org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class
+    }
+)
 class MatchControllerTest {
 
     @Autowired
@@ -224,5 +240,259 @@ class MatchControllerTest {
         // When/Then
         mockMvc.perform(get("/api/matches/999"))
             .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void startMatch_ChangesStatusToInProgress() throws Exception {
+        // Given
+        testMatchDTO.setStatus(MatchStatus.IN_PROGRESS);
+        when(matchService.startMatchAndReturn(1L)).thenReturn(testMatchDTO);
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/start"))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$.id", is(1)))
+            .andExpect(jsonPath("$.status", is("IN_PROGRESS")));
+
+        verify(matchService).startMatchAndReturn(1L);
+    }
+
+    @Test
+    void startMatch_WhenMatchNotPending_ThrowsException() throws Exception {
+        // Given
+        when(matchService.startMatchAndReturn(1L))
+            .thenThrow(new IllegalStateException("Only pending matches can be started"));
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/start"))
+            .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void completeMatch_DeterminesWinnerAndChangesStatus() throws Exception {
+        // Given
+        testMatchDTO.setStatus(MatchStatus.COMPLETED);
+        testMatchDTO.setAthlete1Points(9);
+        testMatchDTO.setAthlete2Points(2);
+        testMatchDTO.setWinnerId(1L);
+        testMatchDTO.setWinnerName("John Doe");
+        when(matchService.completeMatchAndReturn(1L)).thenReturn(testMatchDTO);
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/complete"))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$.id", is(1)))
+            .andExpect(jsonPath("$.status", is("COMPLETED")))
+            .andExpect(jsonPath("$.winnerId", is(1)))
+            .andExpect(jsonPath("$.winnerName", is("John Doe")))
+            .andExpect(jsonPath("$.athlete1Points", is(9)))
+            .andExpect(jsonPath("$.athlete2Points", is(2)));
+
+        verify(matchService).completeMatchAndReturn(1L);
+    }
+
+    @Test
+    void completeMatch_WhenMatchNotInProgress_ThrowsException() throws Exception {
+        // Given
+        when(matchService.completeMatchAndReturn(1L))
+            .thenThrow(new IllegalStateException("Only matches in progress can be completed"));
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/complete"))
+            .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void recordSubmission_RecordsSubmissionVictory() throws Exception {
+        // Given
+        testMatchDTO.setStatus(MatchStatus.COMPLETED);
+        testMatchDTO.setFinishedBySubmission(true);
+        testMatchDTO.setSubmissionType("Rear Naked Choke");
+        testMatchDTO.setWinnerId(1L);
+        testMatchDTO.setWinnerName("John Doe");
+        when(matchService.recordSubmissionAndReturn(eq(1L), eq(1L), eq("Rear Naked Choke")))
+            .thenReturn(testMatchDTO);
+
+        String requestBody = """
+            {
+                "winnerId": 1,
+                "submissionType": "Rear Naked Choke"
+            }
+            """;
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/submission")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$.id", is(1)))
+            .andExpect(jsonPath("$.status", is("COMPLETED")))
+            .andExpect(jsonPath("$.finishedBySubmission", is(true)))
+            .andExpect(jsonPath("$.submissionType", is("Rear Naked Choke")))
+            .andExpect(jsonPath("$.winnerId", is(1)));
+
+        verify(matchService).recordSubmissionAndReturn(1L, 1L, "Rear Naked Choke");
+    }
+
+    @Test
+    void recordSubmission_WithInvalidWinner_ThrowsException() throws Exception {
+        // Given
+        when(matchService.recordSubmissionAndReturn(eq(1L), eq(999L), any()))
+            .thenThrow(new IllegalArgumentException("Winner athlete not found"));
+
+        String requestBody = """
+            {
+                "winnerId": 999,
+                "submissionType": "Triangle Choke"
+            }
+            """;
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/submission")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+            .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void recordWalkover_RecordsWalkoverVictory() throws Exception {
+        // Given
+        testMatchDTO.setStatus(MatchStatus.WALKOVER);
+        testMatchDTO.setWinnerId(2L);
+        testMatchDTO.setWinnerName("Jane Smith");
+        when(matchService.recordWalkoverAndReturn(1L, 2L)).thenReturn(testMatchDTO);
+
+        String requestBody = """
+            {
+                "winnerId": 2
+            }
+            """;
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/walkover")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$.id", is(1)))
+            .andExpect(jsonPath("$.status", is("WALKOVER")))
+            .andExpect(jsonPath("$.winnerId", is(2)))
+            .andExpect(jsonPath("$.winnerName", is("Jane Smith")));
+
+        verify(matchService).recordWalkoverAndReturn(1L, 2L);
+    }
+
+    @Test
+    void recordWalkover_WithInvalidWinner_ThrowsException() throws Exception {
+        // Given
+        when(matchService.recordWalkoverAndReturn(eq(1L), eq(999L)))
+            .thenThrow(new IllegalArgumentException("Winner must be one of the match participants"));
+
+        String requestBody = """
+            {
+                "winnerId": 999
+            }
+            """;
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/walkover")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+            .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void resetMatch_ResetsAllScoresAndStatus() throws Exception {
+        // Given - Match that was completed with scores
+        MatchResponseDTO resetMatchDTO = new MatchResponseDTO();
+        resetMatchDTO.setId(1L);
+        resetMatchDTO.setDivisionId(1L);
+        resetMatchDTO.setDivisionName("Adult Male Blue Belt");
+        resetMatchDTO.setAthlete1Id(1L);
+        resetMatchDTO.setAthlete1Name("John Doe");
+        resetMatchDTO.setAthlete1Team("Team A");
+        resetMatchDTO.setAthlete2Id(2L);
+        resetMatchDTO.setAthlete2Name("Jane Smith");
+        resetMatchDTO.setAthlete2Team("Team B");
+        resetMatchDTO.setStatus(MatchStatus.PENDING);
+        resetMatchDTO.setRoundNumber(1);
+        resetMatchDTO.setMatchPosition(1);
+        // All scores reset to 0
+        resetMatchDTO.setAthlete1Points(0);
+        resetMatchDTO.setAthlete2Points(0);
+        resetMatchDTO.setAthlete1Advantages(0);
+        resetMatchDTO.setAthlete2Advantages(0);
+        resetMatchDTO.setAthlete1Penalties(0);
+        resetMatchDTO.setAthlete2Penalties(0);
+        resetMatchDTO.setAthlete1TotalScore(0);
+        resetMatchDTO.setAthlete2TotalScore(0);
+        resetMatchDTO.setFinishedBySubmission(false);
+        resetMatchDTO.setWinnerId(null);
+        resetMatchDTO.setWinnerName(null);
+
+        when(matchService.resetMatch(1L)).thenReturn(resetMatchDTO);
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/reset"))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$.id", is(1)))
+            .andExpect(jsonPath("$.status", is("PENDING")))
+            .andExpect(jsonPath("$.athlete1Points", is(0)))
+            .andExpect(jsonPath("$.athlete2Points", is(0)))
+            .andExpect(jsonPath("$.athlete1Advantages", is(0)))
+            .andExpect(jsonPath("$.athlete2Advantages", is(0)))
+            .andExpect(jsonPath("$.athlete1Penalties", is(0)))
+            .andExpect(jsonPath("$.athlete2Penalties", is(0)))
+            .andExpect(jsonPath("$.winnerId").doesNotExist())
+            .andExpect(jsonPath("$.winnerName").doesNotExist())
+            .andExpect(jsonPath("$.finishedBySubmission", is(false)));
+
+        verify(matchService).resetMatch(1L);
+    }
+
+    @Test
+    void resetMatch_WhenMatchNotFound_ThrowsException() throws Exception {
+        // Given
+        when(matchService.resetMatch(999L))
+            .thenThrow(new IllegalArgumentException("Match not found with ID: 999"));
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/999/reset"))
+            .andExpect(status().is4xxClientError());
+
+        verify(matchService).resetMatch(999L);
+    }
+
+    @Test
+    void resetMatch_ClearsSubmissionInformation() throws Exception {
+        // Given - Match that was won by submission
+        MatchResponseDTO resetMatchDTO = new MatchResponseDTO();
+        resetMatchDTO.setId(1L);
+        resetMatchDTO.setStatus(MatchStatus.PENDING);
+        resetMatchDTO.setFinishedBySubmission(false);
+        resetMatchDTO.setSubmissionType(null);
+        resetMatchDTO.setWinnerId(null);
+        resetMatchDTO.setAthlete1Points(0);
+        resetMatchDTO.setAthlete2Points(0);
+        resetMatchDTO.setAthlete1Advantages(0);
+        resetMatchDTO.setAthlete2Advantages(0);
+        resetMatchDTO.setAthlete1Penalties(0);
+        resetMatchDTO.setAthlete2Penalties(0);
+
+        when(matchService.resetMatch(1L)).thenReturn(resetMatchDTO);
+
+        // When/Then
+        mockMvc.perform(post("/api/matches/1/reset"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status", is("PENDING")))
+            .andExpect(jsonPath("$.finishedBySubmission", is(false)))
+            .andExpect(jsonPath("$.submissionType").doesNotExist())
+            .andExpect(jsonPath("$.winnerId").doesNotExist());
+
+        verify(matchService).resetMatch(1L);
     }
 }

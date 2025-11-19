@@ -307,6 +307,99 @@ public class MatchService {
     }
 
     /**
+     * Start a match and return as DTO
+     */
+    @Transactional
+    public MatchResponseDTO startMatchAndReturn(Long matchId) {
+        Match startedMatch = startMatch(matchId);
+        return convertToDTO(startedMatch);
+    }
+
+    /**
+     * Complete a match and return as DTO
+     * Automatically determines winner based on scores
+     */
+    @Transactional
+    public MatchResponseDTO completeMatchAndReturn(Long matchId) {
+        log.info("Completing match ID: {}", matchId);
+
+        Match match = getMatchEntityById(matchId);
+
+        // Ensure match is in progress
+        if (match.getStatus() != MatchStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Only matches in progress can be completed");
+        }
+
+        // Determine winner based on IBJJF rules
+        match.determineWinner();
+        match.setStatus(MatchStatus.COMPLETED);
+
+        Match savedMatch = matchRepository.save(match);
+
+        // Advance winner to next round if applicable
+        if (savedMatch.getWinner() != null) {
+            try {
+                bracketService.advanceWinnerToNextRound(matchId, savedMatch.getWinner().getId());
+            } catch (Exception e) {
+                log.error("Error advancing winner to next round: {}", e.getMessage());
+            }
+        }
+
+        log.info("Successfully completed match ID: {}", matchId);
+        return convertToDTO(savedMatch);
+    }
+
+    /**
+     * Record a submission and return as DTO
+     */
+    @Transactional
+    public MatchResponseDTO recordSubmissionAndReturn(Long matchId, Long winnerId, String submissionType) {
+        Match match = recordSubmission(matchId, winnerId, submissionType);
+        return convertToDTO(match);
+    }
+
+    /**
+     * Record a walkover and return as DTO
+     */
+    @Transactional
+    public MatchResponseDTO recordWalkoverAndReturn(Long matchId, Long winnerId) {
+        Match match = recordWalkover(matchId, winnerId);
+        return convertToDTO(match);
+    }
+
+    /**
+     * Reset/restart a match - clears all scores and sets status back to PENDING
+     * This allows a match to be re-run if needed
+     */
+    @Transactional
+    public MatchResponseDTO resetMatch(Long matchId) {
+        log.info("Resetting match ID: {}", matchId);
+
+        Match match = getMatchEntityById(matchId);
+
+        // Reset all scores to 0
+        match.setAthlete1Points(0);
+        match.setAthlete2Points(0);
+        match.setAthlete1Advantages(0);
+        match.setAthlete2Advantages(0);
+        match.setAthlete1Penalties(0);
+        match.setAthlete2Penalties(0);
+
+        // Clear winner and submission info
+        match.setWinner(null);
+        match.setFinishedBySubmission(false);
+        match.setSubmissionType(null);
+
+        // Reset status to PENDING
+        match.setStatus(MatchStatus.PENDING);
+
+        Match savedMatch = matchRepository.save(match);
+        log.info("Successfully reset match ID: {} - Status is now PENDING", matchId);
+
+        return convertToDTO(savedMatch);
+    }
+
+    /**
      * Convert Match entity to MatchResponseDTO
      */
     private MatchResponseDTO convertToDTO(Match match) {
