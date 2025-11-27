@@ -330,9 +330,9 @@ public class MatchService {
             throw new IllegalStateException("Only matches in progress can be completed");
         }
 
-        // Determine winner based on IBJJF rules
-        match.determineWinner();
+        // Set status to COMPLETED first, then determine winner based on IBJJF rules
         match.setStatus(MatchStatus.COMPLETED);
+        match.determineWinner();
 
         Match savedMatch = matchRepository.save(match);
 
