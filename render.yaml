@@ -1,0 +1,26 @@
+# Render deployment configuration
+services:
+  # Backend - Spring Boot API
+  - type: web
+    name: bjj-tournament-api
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    healthCheckPath: /api/auth/me
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bjj-tournament-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRATION
+        value: "86400000"
+      - key: ALLOWED_ORIGINS
+        value: "https://bjj-tournament-frontend.onrender.com"
+
+# Database (you'll create this in Supabase instead)
+# We're using Supabase for free PostgreSQL instead of Render's 90-day limit
