@@ -19,19 +19,34 @@ import java.time.Period;
  * Contains personal information, belt rank, and physical attributes
  */
 @Entity
-@Table(name = "athletes", indexes = {
-    @Index(name = "idx_athlete_belt", columnList = "belt_rank"),
-    @Index(name = "idx_athlete_gender", columnList = "gender"),
-    @Index(name = "idx_athlete_age", columnList = "age")
-})
+@Table(name = "athletes",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_athlete_email",
+            columnNames = {"email"}
+        )
+    },
+    indexes = {
+        @Index(name = "idx_athlete_belt", columnList = "belt_rank"),
+        @Index(name = "idx_athlete_gender", columnList = "gender"),
+        @Index(name = "idx_athlete_age", columnList = "age")
+    }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class Athlete {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * Version for optimistic locking
+     * Prevents concurrent modification conflicts
+     */
+    @Version
+    private Long version;
     
     /**
      * Athlete's full name
@@ -101,7 +116,7 @@ public class Athlete {
      */
     @Email(message = "Invalid email format")
     @NotBlank(message = "Email is required")
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, unique = true, length = 100)
     private String email;
     
     /**

@@ -26,10 +26,17 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Tournament {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * Version for optimistic locking
+     * Prevents concurrent modification conflicts (e.g., multiple users starting/completing tournament)
+     */
+    @Version
+    private Long version;
     
     /**
      * Name of the tournament (e.g., "Summer BJJ Championship 2025")

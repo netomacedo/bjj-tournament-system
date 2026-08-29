@@ -26,10 +26,17 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Match {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * Version for optimistic locking
+     * Prevents concurrent score updates from multiple users
+     */
+    @Version
+    private Long version;
     
     /**
      * The division this match belongs to

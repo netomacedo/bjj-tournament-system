@@ -20,19 +20,34 @@ import java.util.List;
  * Example: "Adult Male Blue Belt Light Division"
  */
 @Entity
-@Table(name = "divisions", indexes = {
-    @Index(name = "idx_division_tournament", columnList = "tournament_id"),
-    @Index(name = "idx_division_belt", columnList = "belt_rank"),
-    @Index(name = "idx_division_age", columnList = "age_category")
-})
+@Table(name = "divisions",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_division_criteria",
+            columnNames = {"tournament_id", "belt_rank", "age_category", "gender"}
+        )
+    },
+    indexes = {
+        @Index(name = "idx_division_tournament", columnList = "tournament_id"),
+        @Index(name = "idx_division_belt", columnList = "belt_rank"),
+        @Index(name = "idx_division_age", columnList = "age_category")
+    }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class Division {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * Version for optimistic locking
+     * Prevents concurrent modification conflicts
+     */
+    @Version
+    private Long version;
     
     /**
      * The tournament this division belongs to
@@ -98,7 +113,11 @@ public class Division {
     @JoinTable(
         name = "division_athletes",
         joinColumns = @JoinColumn(name = "division_id"),
-        inverseJoinColumns = @JoinColumn(name = "athlete_id")
+        inverseJoinColumns = @JoinColumn(name = "athlete_id"),
+        uniqueConstraints = @UniqueConstraint(
+            name = "uk_division_athlete",
+            columnNames = {"division_id", "athlete_id"}
+        )
     )
     private List<Athlete> athletes = new ArrayList<>();
     
