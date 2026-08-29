@@ -1,5 +1,6 @@
 package com.bjj.tournament.controller;
 
+import com.bjj.tournament.dto.AthleteRankingDTO;
 import com.bjj.tournament.dto.DivisionCreateDTO;
 import com.bjj.tournament.dto.DivisionResponseDTO;
 import com.bjj.tournament.dto.DivisionUpdateDTO;
@@ -130,5 +131,16 @@ public class DivisionController {
         log.info("REST request to get divisions ready for match generation");
         List<DivisionResponseDTO> divisions = divisionService.getDivisionsReadyForMatchGeneration();
         return ResponseEntity.ok(divisions);
+    }
+
+    /**
+     * Get division rankings (medal positions)
+     * GET /api/divisions/{divisionId}/rankings
+     */
+    @GetMapping("/divisions/{divisionId}/rankings")
+    public ResponseEntity<List<AthleteRankingDTO>> getDivisionRankings(@PathVariable Long divisionId) {
+        log.info("REST request to get rankings for division ID: {}", divisionId);
+        List<AthleteRankingDTO> rankings = divisionService.getDivisionRankings(divisionId);
+        return ResponseEntity.ok(rankings);
     }
 }

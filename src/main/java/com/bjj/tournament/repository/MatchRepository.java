@@ -51,4 +51,9 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
      */
     @Query("SELECT COUNT(m) FROM Match m WHERE m.division.id = :divisionId AND m.status = 'COMPLETED'")
     Long countCompletedMatchesByDivision(Long divisionId);
+
+    /**
+     * Find matches by division ID ordered by round number
+     */
+    List<Match> findByDivisionIdOrderByRoundNumberAsc(Long divisionId);
 }

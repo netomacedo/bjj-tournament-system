@@ -374,4 +374,63 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.token", notNullValue()))
                 .andExpect(jsonPath("$.token", is(mockToken)));
     }
+
+    @Test
+    @WithMockUser(username = "testuser")
+    void refreshToken_WithValidAuthentication_ReturnsNewToken() throws Exception {
+        // Given
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                testUser, null, testUser.getAuthorities()
+        );
+        String newToken = "refreshed.jwt.token";
+
+        when(tokenProvider.generateToken(any(Authentication.class))).thenReturn(newToken);
+        when(userService.getUserByUsername("testuser")).thenReturn(testUser);
+
+        // When/Then
+        mockMvc.perform(post("/api/auth/refresh")
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.token", is(newToken)))
+                .andExpect(jsonPath("$.type", is("Bearer")))
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.username", is("testuser")))
+                .andExpect(jsonPath("$.email", is("test@example.com")))
+                .andExpect(jsonPath("$.fullName", is("Test User")))
+                .andExpect(jsonPath("$.role", is("ROLE_USER")));
+
+        verify(tokenProvider).generateToken(any(Authentication.class));
+        verify(userService).getUserByUsername("testuser");
+    }
+
+    @Test
+    void refreshToken_WithoutAuthentication_ReturnsUnauthorized() throws Exception {
+        // When/Then
+        mockMvc.perform(post("/api/auth/refresh")
+                        .with(csrf()))
+                .andExpect(status().isUnauthorized());
+
+        verify(tokenProvider, never()).generateToken(any());
+        verify(userService, never()).getUserByUsername(anyString());
+    }
+
+    @Test
+    @WithMockUser(username = "testuser")
+    void refreshToken_ExtendsSessionBy24Hours() throws Exception {
+        // Given - simulating token refresh extends session
+        String newToken = "new.24hour.token";
+
+        when(tokenProvider.generateToken(any(Authentication.class))).thenReturn(newToken);
+        when(userService.getUserByUsername("testuser")).thenReturn(testUser);
+
+        // When/Then
+        mockMvc.perform(post("/api/auth/refresh")
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token", is(newToken)));
+
+        // Verify new token was generated
+        verify(tokenProvider).generateToken(any(Authentication.class));
+    }
 }

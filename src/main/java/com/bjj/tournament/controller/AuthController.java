@@ -148,6 +148,43 @@ public class AuthController {
     }
 
     /**
+     * Refresh JWT token
+     * POST /api/auth/refresh
+     * Requires a valid (not expired) token
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ErrorResponse("Not authenticated"));
+        }
+
+        try {
+            // Generate new token with fresh 24h expiration
+            String newJwt = tokenProvider.generateToken(authentication);
+
+            User user = userService.getUserByUsername(authentication.getName());
+
+            AuthResponseDTO response = new AuthResponseDTO(
+                    newJwt,
+                    user.getId(),
+                    user.getUsername(),
+                    user.getEmail(),
+                    user.getFullName(),
+                    user.getRole()
+            );
+
+            log.info("Token refreshed successfully for user: {}", user.getUsername());
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("Token refresh failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("Failed to refresh token"));
+        }
+    }
+
+    /**
      * Logout user (client-side only - JWT is stateless)
      * POST /api/auth/logout
      */

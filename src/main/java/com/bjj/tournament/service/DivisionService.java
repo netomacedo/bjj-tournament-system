@@ -1,20 +1,23 @@
 package com.bjj.tournament.service;
 
+import com.bjj.tournament.dto.AthleteRankingDTO;
 import com.bjj.tournament.dto.DivisionCreateDTO;
 import com.bjj.tournament.dto.DivisionResponseDTO;
 import com.bjj.tournament.dto.DivisionUpdateDTO;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.entity.Division;
+import com.bjj.tournament.entity.Match;
 import com.bjj.tournament.entity.Tournament;
 import com.bjj.tournament.repository.AthleteRepository;
 import com.bjj.tournament.repository.DivisionRepository;
+import com.bjj.tournament.repository.MatchRepository;
 import com.bjj.tournament.repository.TournamentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -29,6 +32,7 @@ public class DivisionService {
     private final DivisionRepository divisionRepository;
     private final TournamentRepository tournamentRepository;
     private final AthleteRepository athleteRepository;
+    private final MatchRepository matchRepository;
 
     /**
      * Create a new division for a tournament
@@ -294,6 +298,138 @@ public class DivisionService {
                     maxWeight + " kg)"
                 );
             }
+        }
+    }
+
+    /**
+     * Get division rankings (medal positions) based on bracket results
+     */
+    @Transactional(readOnly = true)
+    public List<AthleteRankingDTO> getDivisionRankings(Long divisionId) {
+        log.info("Calculating rankings for division ID: {}", divisionId);
+
+        Division division = divisionRepository.findById(divisionId)
+            .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
+
+        if (!division.getMatchesGenerated()) {
+            log.warn("Matches not generated yet for division ID: {}", divisionId);
+            return Collections.emptyList();
+        }
+
+        // Get all matches for this division
+        List<Match> matches = matchRepository.findByDivisionIdOrderByRoundNumberAsc(divisionId);
+
+        if (matches.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Calculate stats for each athlete
+        Map<Long, AthleteRankingDTO> athleteStats = new HashMap<>();
+
+        for (Match match : matches) {
+            if (match.getAthlete1() != null) {
+                athleteStats.putIfAbsent(match.getAthlete1().getId(),
+                    createAthleteRanking(match.getAthlete1()));
+            }
+            if (match.getAthlete2() != null) {
+                athleteStats.putIfAbsent(match.getAthlete2().getId(),
+                    createAthleteRanking(match.getAthlete2()));
+            }
+
+            // Track wins/losses and points only for completed matches
+            if (match.getWinner() != null) {
+                Long winnerId = match.getWinner().getId();
+                Long loserId = match.getAthlete1().getId().equals(winnerId) ?
+                    match.getAthlete2().getId() : match.getAthlete1().getId();
+
+                // Update winner stats
+                AthleteRankingDTO winnerStats = athleteStats.get(winnerId);
+                winnerStats.setWins(winnerStats.getWins() + 1);
+                winnerStats.setTotalPoints(winnerStats.getTotalPoints() +
+                    (winnerId.equals(match.getAthlete1().getId()) ?
+                        match.getAthlete1Points() : match.getAthlete2Points()));
+
+                // Update loser stats
+                AthleteRankingDTO loserStats = athleteStats.get(loserId);
+                loserStats.setLosses(loserStats.getLosses() + 1);
+                loserStats.setTotalPoints(loserStats.getTotalPoints() +
+                    (loserId.equals(match.getAthlete1().getId()) ?
+                        match.getAthlete1Points() : match.getAthlete2Points()));
+            }
+        }
+
+        // Determine positions based on bracket structure
+        assignMedalPositions(matches, athleteStats);
+
+        // Sort by position, then by wins, then by total points
+        return athleteStats.values().stream()
+            .filter(ranking -> ranking.getPosition() != null)
+            .sorted(Comparator.comparing(AthleteRankingDTO::getPosition)
+                .thenComparing(Comparator.comparing(AthleteRankingDTO::getWins).reversed())
+                .thenComparing(Comparator.comparing(AthleteRankingDTO::getTotalPoints).reversed()))
+            .collect(Collectors.toList());
+    }
+
+    private AthleteRankingDTO createAthleteRanking(Athlete athlete) {
+        AthleteRankingDTO ranking = new AthleteRankingDTO();
+        ranking.setAthleteId(athlete.getId());
+        ranking.setAthleteName(athlete.getName());
+        ranking.setTeam(athlete.getTeam());
+        ranking.setWins(0);
+        ranking.setLosses(0);
+        ranking.setTotalPoints(0);
+        return ranking;
+    }
+
+    private void assignMedalPositions(List<Match> matches, Map<Long, AthleteRankingDTO> athleteStats) {
+        // Find the finals match (highest round number - this is the championship match)
+        Optional<Match> finalsMatch = matches.stream()
+            .filter(m -> m.getWinner() != null)
+            .max(Comparator.comparing(Match::getRoundNumber));
+
+        if (finalsMatch.isPresent()) {
+            Match finals = finalsMatch.get();
+            int finalsRound = finals.getRoundNumber();
+
+            // 1st place: Finals winner (GOLD)
+            Long goldWinnerId = finals.getWinner().getId();
+            AthleteRankingDTO goldWinner = athleteStats.get(goldWinnerId);
+            if (goldWinner != null) {
+                goldWinner.setPosition(1);
+                goldWinner.setMedal("GOLD");
+            }
+
+            // 2nd place: Finals loser (SILVER)
+            Long silverWinnerId = finals.getAthlete1().getId().equals(goldWinnerId) ?
+                finals.getAthlete2().getId() : finals.getAthlete1().getId();
+            AthleteRankingDTO silverWinner = athleteStats.get(silverWinnerId);
+            if (silverWinner != null) {
+                silverWinner.setPosition(2);
+                silverWinner.setMedal("SILVER");
+            }
+
+            // 3rd place: Semi-finals losers (BRONZE)
+            // Semi-finals are one round before finals
+            List<Match> semifinals = matches.stream()
+                .filter(m -> m.getRoundNumber() == finalsRound - 1 && m.getWinner() != null)
+                .collect(Collectors.toList());
+
+            int bronzeCount = 0;
+            for (Match semi : semifinals) {
+                Long loserId = semi.getAthlete1().getId().equals(semi.getWinner().getId()) ?
+                    semi.getAthlete2().getId() : semi.getAthlete1().getId();
+
+                if (athleteStats.containsKey(loserId)) {
+                    AthleteRankingDTO bronzeWinner = athleteStats.get(loserId);
+                    bronzeWinner.setPosition(3);
+                    bronzeWinner.setMedal("BRONZE");
+                    bronzeCount++;
+                }
+            }
+
+            log.info("Assigned medals for division: 1 Gold, 1 Silver, {} Bronze", bronzeCount);
+        } else {
+            log.warn("No completed finals match found - cannot assign medal positions");
         }
     }
 
