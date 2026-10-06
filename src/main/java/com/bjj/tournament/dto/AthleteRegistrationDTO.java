@@ -46,7 +46,7 @@ public class AthleteRegistrationDTO {
     @Email(message = "Invalid email format")
     private String email;
 
-    @Pattern(regexp = "^[+]?[0-9]{10,15}$", message = "Invalid phone number format")
+    @Pattern(regexp = "^$|^[+]?[0-9]{10,15}$", message = "Invalid phone number format")
     private String phone;
 
     @Size(max = 500, message = "Experience notes must be less than 500 characters")

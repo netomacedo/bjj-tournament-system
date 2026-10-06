@@ -197,6 +197,29 @@ public class AuthController {
     }
 
     /**
+     * TEMPORARY: List all users (for debugging)
+     * GET /api/auth/users/all
+     */
+    @GetMapping("/users/all")
+    public ResponseEntity<?> getAllUsers() {
+        log.info("Fetching all users from database");
+        var users = userService.getAllUsers();
+
+        // Return simplified user info (no passwords)
+        var userInfo = users.stream()
+            .map(u -> new UserInfo(u.getId(), u.getUsername(), u.getEmail(), u.getFullName(), u.getRole(), u.isEnabled()))
+            .toList();
+
+        log.info("Found {} users", userInfo.size());
+        return ResponseEntity.ok(userInfo);
+    }
+
+    /**
+     * User info response (no password)
+     */
+    record UserInfo(Long id, String username, String email, String fullName, String role, Boolean enabled) {}
+
+    /**
      * Error response class
      */
     record ErrorResponse(String message) {}

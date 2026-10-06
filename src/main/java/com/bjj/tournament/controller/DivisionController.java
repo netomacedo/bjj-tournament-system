@@ -80,8 +80,12 @@ public class DivisionController {
      */
     @DeleteMapping("/divisions/{divisionId}")
     public ResponseEntity<Void> deleteDivision(@PathVariable Long divisionId) {
+        System.out.println("==========================================");
+        System.out.println("DELETE ENDPOINT CALLED - Division ID: " + divisionId);
+        System.out.println("==========================================");
         log.info("REST request to delete division ID: {}", divisionId);
         divisionService.deleteDivision(divisionId);
+        System.out.println("DELETE COMPLETED - Returning 204");
         return ResponseEntity.noContent().build();
     }
 

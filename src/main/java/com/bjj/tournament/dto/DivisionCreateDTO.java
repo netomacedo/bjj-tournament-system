@@ -12,13 +12,15 @@ import lombok.NoArgsConstructor;
 
 /**
  * DTO for creating a new division
+ * Divisions are primarily by age and weight
+ * Belt rank is optional for belt-specific divisions
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class DivisionCreateDTO {
 
-    @NotNull(message = "Belt rank is required")
+    // Optional - only for belt-specific divisions
     private BeltRank beltRank;
 
     @NotNull(message = "Age category is required")

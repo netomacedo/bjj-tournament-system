@@ -2,7 +2,12 @@ package com.bjj.tournament.service;
 
 import com.bjj.tournament.dto.TournamentCreateDTO;
 import com.bjj.tournament.entity.Tournament;
+import com.bjj.tournament.entity.Division;
+import com.bjj.tournament.entity.Match;
 import com.bjj.tournament.repository.TournamentRepository;
+import com.bjj.tournament.repository.DivisionRepository;
+import com.bjj.tournament.repository.MatchRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,8 +24,11 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class TournamentService {
-    
+
     private final TournamentRepository tournamentRepository;
+    private final EntityManager entityManager;
+    private final MatchRepository matchRepository;
+    private final DivisionRepository divisionRepository;
     
     /**
      * Create a new tournament
@@ -157,13 +165,38 @@ public class TournamentService {
      */
     @Transactional
     public void deleteTournament(Long id) {
-        log.info("Deleting tournament with ID: {}", id);
-        
-        if (!tournamentRepository.existsById(id)) {
-            throw new IllegalArgumentException("Tournament not found with ID: " + id);
-        }
-        
-        tournamentRepository.deleteById(id);
-        log.info("Successfully deleted tournament with ID: {}", id);
+        log.info("==========================================");
+        log.info("TOURNAMENT DELETION STARTED - ID: {}", id);
+        log.info("==========================================");
+
+        Tournament tournament = tournamentRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Tournament not found with ID: " + id));
+
+        log.info("Tournament found: {}", tournament.getName());
+
+        // Step 1: Delete all matches for this tournament using JPQL (bypasses @Version)
+        int deletedMatches = entityManager.createQuery(
+            "DELETE FROM Match m WHERE m.division.tournament.id = :tournamentId")
+            .setParameter("tournamentId", id)
+            .executeUpdate();
+        log.info("Deleted {} matches", deletedMatches);
+
+        // Step 2: Delete all divisions using JPQL (bypasses @Version)
+        int deletedDivisions = entityManager.createQuery(
+            "DELETE FROM Division d WHERE d.tournament.id = :tournamentId")
+            .setParameter("tournamentId", id)
+            .executeUpdate();
+        log.info("Deleted {} divisions", deletedDivisions);
+
+        // Step 3: Delete the tournament using JPQL
+        log.info("Deleting tournament...");
+        entityManager.createQuery("DELETE FROM Tournament t WHERE t.id = :tournamentId")
+            .setParameter("tournamentId", id)
+            .executeUpdate();
+        log.info("Tournament deleted successfully");
+
+        log.info("==========================================");
+        log.info("TOURNAMENT DELETION COMPLETED - ID: {}", id);
+        log.info("==========================================");
     }
 }

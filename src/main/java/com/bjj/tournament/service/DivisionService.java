@@ -12,6 +12,7 @@ import com.bjj.tournament.repository.AthleteRepository;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
 import com.bjj.tournament.repository.TournamentRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class DivisionService {
     private final TournamentRepository tournamentRepository;
     private final AthleteRepository athleteRepository;
     private final MatchRepository matchRepository;
+    private final EntityManager entityManager;
 
     /**
      * Create a new division for a tournament
@@ -144,18 +146,33 @@ public class DivisionService {
      */
     @Transactional
     public void deleteDivision(Long divisionId) {
-        log.info("Deleting division ID: {}", divisionId);
+        log.info("==========================================");
+        log.info("DELETION STARTED - Division ID: {}", divisionId);
+        log.info("==========================================");
 
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
 
+        log.info("Division found: {}", division.getName());
+        log.info("Matches generated: {}", division.getMatchesGenerated());
+        log.info("Athletes enrolled: {}", division.getAthletes().size());
+
         // Cannot delete if matches have been generated
         if (division.getMatchesGenerated()) {
+            log.error("Cannot delete - matches already generated!");
             throw new IllegalStateException("Cannot delete division after matches have been generated");
         }
 
-        divisionRepository.delete(division);
-        log.info("Successfully deleted division ID: {}", divisionId);
+        // Delete division using JPQL (bypasses @Version issues)
+        log.info("Deleting division...");
+        int deleted = entityManager.createQuery("DELETE FROM Division d WHERE d.id = :divisionId")
+            .setParameter("divisionId", divisionId)
+            .executeUpdate();
+        log.info("Division deleted successfully (rows affected: {})", deleted);
+
+        log.info("==========================================");
+        log.info("DELETION COMPLETED - Division ID: {}", divisionId);
+        log.info("==========================================");
     }
 
     /**
@@ -254,8 +271,9 @@ public class DivisionService {
      * Validate athlete meets division eligibility criteria
      */
     private void validateAthleteEligibility(Athlete athlete, Division division) {
-        // Check belt rank
-        if (!athlete.getBeltRank().equals(division.getBeltRank())) {
+        // Belt rank is optional - divisions are primarily by age/weight
+        // Only check if division has a specific belt rank requirement
+        if (division.getBeltRank() != null && !athlete.getBeltRank().equals(division.getBeltRank())) {
             throw new IllegalArgumentException(
                 "Athlete belt rank (" + athlete.getBeltRank() +
                 ") does not match division requirement (" + division.getBeltRank() + ")"

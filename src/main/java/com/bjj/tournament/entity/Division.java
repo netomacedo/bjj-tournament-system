@@ -16,20 +16,19 @@ import java.util.List;
 
 /**
  * Entity representing a competition division
- * A division groups athletes by belt rank, age category, gender, and weight class
- * Example: "Adult Male Blue Belt Light Division"
+ * A division groups athletes by age category, gender, and weight class
+ * Example: "Tiny Tot Male Light Division"
  */
 @Entity
 @Table(name = "divisions",
     uniqueConstraints = {
         @UniqueConstraint(
             name = "uk_division_criteria",
-            columnNames = {"tournament_id", "belt_rank", "age_category", "gender"}
+            columnNames = {"tournament_id", "age_category", "gender", "weight_class"}
         )
     },
     indexes = {
         @Index(name = "idx_division_tournament", columnList = "tournament_id"),
-        @Index(name = "idx_division_belt", columnList = "belt_rank"),
         @Index(name = "idx_division_age", columnList = "age_category")
     }
 )
@@ -67,11 +66,11 @@ public class Division {
     private String name;
     
     /**
-     * Belt rank for this division
+     * Belt rank for this division (optional - for belt-specific divisions)
+     * Most divisions are by age/weight only
      */
-    @NotNull(message = "Belt rank is required")
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, name = "belt_rank", length = 30)
+    @Column(nullable = true, name = "belt_rank", length = 30)
     private BeltRank beltRank;
     
     /**
@@ -192,23 +191,25 @@ public class Division {
     @PreUpdate
     private void generateName() {
         StringBuilder nameBuilder = new StringBuilder();
-        
+
         // Add age category
         nameBuilder.append(ageCategory.getDisplayName());
-        
+
         // Add gender if applicable (not for kids under 10)
         if (gender != Gender.NOT_APPLICABLE) {
             nameBuilder.append(" ").append(gender.getDisplayName());
         }
-        
-        // Add belt rank
-        nameBuilder.append(" ").append(beltRank.getDisplayName());
-        
+
+        // Add belt rank (optional - only if division is belt-specific)
+        if (beltRank != null) {
+            nameBuilder.append(" ").append(beltRank.getDisplayName());
+        }
+
         // Add weight class if specified
         if (weightClass != null) {
             nameBuilder.append(" ").append(weightClass.getDisplayName());
         }
-        
+
         this.name = nameBuilder.toString();
     }
 }
