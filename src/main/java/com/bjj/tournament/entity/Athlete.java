@@ -20,12 +20,6 @@ import java.time.Period;
  */
 @Entity
 @Table(name = "athletes",
-    uniqueConstraints = {
-        @UniqueConstraint(
-            name = "uk_athlete_email",
-            columnNames = {"email"}
-        )
-    },
     indexes = {
         @Index(name = "idx_athlete_belt", columnList = "belt_rank"),
         @Index(name = "idx_athlete_gender", columnList = "gender"),
@@ -57,16 +51,16 @@ public class Athlete {
     private String name;
     
     /**
-     * Athlete's date of birth (used to calculate age and age category)
+     * Athlete's date of birth (optional - can be calculated from age)
      */
-    @NotNull(message = "Date of birth is required")
     @Past(message = "Date of birth must be in the past")
-    @Column(nullable = false, name = "date_of_birth")
+    @Column(nullable = true, name = "date_of_birth")
     private LocalDate dateOfBirth;
-    
+
     /**
-     * Current age of the athlete (calculated from date of birth)
+     * Current age of the athlete (primary field, date of birth is optional)
      */
+    @NotNull(message = "Age is required")
     @Min(value = 4, message = "Athlete must be at least 4 years old")
     @Max(value = 150, message = "Invalid age")
     @Column(nullable = false)
@@ -98,37 +92,35 @@ public class Athlete {
     private Double weight;
     
     /**
-     * Team/Academy name
+     * Team/Academy name (defaults to "Takedown Martial Arts")
      */
     @Size(max = 100, message = "Team name must be less than 100 characters")
     @Column(length = 100)
-    private String team;
-    
+    private String team = "Takedown Martial Arts";
+
     /**
-     * Coach's name who will manage matches
+     * Coach's name who will manage matches (defaults to "Pedro Monteiro")
      */
     @Size(max = 100, message = "Coach name must be less than 100 characters")
     @Column(name = "coach_name", length = 100)
-    private String coachName;
-    
+    private String coachName = "Pedro Monteiro";
+
     /**
-     * Contact email for athlete or parent/guardian
+     * Contact email for athlete or parent/guardian (optional)
      */
     @Email(message = "Invalid email format")
-    @NotBlank(message = "Email is required")
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = true, length = 100)
     private String email;
-    
+
     /**
-     * Contact phone number
+     * Contact phone number (optional)
      */
-    @Pattern(regexp = "^[+]?[0-9]{10,15}$", message = "Invalid phone number format")
+    @Pattern(regexp = "^$|^[+]?[0-9]{10,15}$", message = "Invalid phone number format")
     @Column(length = 20)
     private String phone;
-    
+
     /**
-     * Experience level notes (for coach to create fair matches)
-     * E.g., "Competition experience: 5 tournaments", "Training time at current belt: 6 months"
+     * Experience level notes (optional, removed from form)
      */
     @Column(length = 500, name = "experience_notes")
     private String experienceNotes;
@@ -148,18 +140,31 @@ public class Athlete {
     private LocalDateTime updatedAt;
     
     /**
-     * Calculate age from date of birth before persisting
+     * Calculate age from date of birth (if provided) and set defaults
      */
     @PrePersist
     @PreUpdate
-    private void calculateAge() {
+    private void calculateAgeAndDefaults() {
+        // If dateOfBirth is provided, calculate age from it
         if (this.dateOfBirth != null) {
             this.age = Period.between(this.dateOfBirth, LocalDate.now()).getYears();
-            
-            // Set gender to NOT_APPLICABLE for kids under 10 if not already set
-            if (this.age < 10 && this.gender == null) {
-                this.gender = Gender.NOT_APPLICABLE;
-            }
+        }
+        // If age is provided but no dateOfBirth, estimate dateOfBirth for database consistency
+        else if (this.age != null && this.dateOfBirth == null) {
+            this.dateOfBirth = LocalDate.now().minusYears(this.age);
+        }
+
+        // Set gender to NOT_APPLICABLE for kids under 10 if not already set
+        if (this.age != null && this.age < 10 && this.gender == null) {
+            this.gender = Gender.NOT_APPLICABLE;
+        }
+
+        // Set default team and coach if not provided
+        if (this.team == null || this.team.trim().isEmpty()) {
+            this.team = "Takedown Martial Arts";
+        }
+        if (this.coachName == null || this.coachName.trim().isEmpty()) {
+            this.coachName = "Pedro Monteiro";
         }
     }
     

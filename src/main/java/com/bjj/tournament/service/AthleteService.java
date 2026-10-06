@@ -41,20 +41,29 @@ public class AthleteService {
     @Transactional
     public Athlete registerAthlete(AthleteRegistrationDTO registrationDTO) {
         log.info("Registering new athlete: {}", registrationDTO.getName());
-        
-        // Check if athlete already exists by email
-        if (athleteRepository.existsByEmail(registrationDTO.getEmail())) {
-            throw new IllegalArgumentException("Athlete with email " + registrationDTO.getEmail() + " already exists");
+
+        // Check if athlete already exists by email (only if email is provided)
+        if (registrationDTO.getEmail() != null && !registrationDTO.getEmail().trim().isEmpty()) {
+            if (athleteRepository.existsByEmail(registrationDTO.getEmail())) {
+                throw new IllegalArgumentException("Athlete with email " + registrationDTO.getEmail() + " already exists");
+            }
         }
-        
-        // Calculate age from date of birth
-        int age = Period.between(registrationDTO.getDateOfBirth(), LocalDate.now()).getYears();
-        
+
+        // Get age from DTO (primary field) or calculate from dateOfBirth if provided
+        int age;
+        if (registrationDTO.getAge() != null) {
+            age = registrationDTO.getAge();
+        } else if (registrationDTO.getDateOfBirth() != null) {
+            age = Period.between(registrationDTO.getDateOfBirth(), LocalDate.now()).getYears();
+        } else {
+            throw new IllegalArgumentException("Either age or date of birth must be provided");
+        }
+
         // Validate minimum age (IBJJF minimum is 4 years)
         if (age < 4) {
             throw new IllegalArgumentException("Athlete must be at least 4 years old to compete");
         }
-        
+
         // Set gender to NOT_APPLICABLE for kids under 10 if not provided
         Gender gender = registrationDTO.getGender();
         if (age < 10 && (gender == null || gender == Gender.MALE || gender == Gender.FEMALE)) {
@@ -65,30 +74,30 @@ public class AthleteService {
         } else if (gender == null) {
             throw new IllegalArgumentException("Gender is required for athletes 10 years or older");
         }
-        
+
         // Validate belt rank for age (kids can't have adult belts)
-        if (age < 16 && !registrationDTO.getBeltRank().isKidsBelt() 
+        if (age < 16 && !registrationDTO.getBeltRank().isKidsBelt()
             && registrationDTO.getBeltRank() != BeltRank.WHITE) {
             throw new IllegalArgumentException("Invalid belt rank for age. Kids under 16 should have kids belts or white belt");
         }
-        
+
         // Create and save athlete
         Athlete athlete = new Athlete();
         athlete.setName(registrationDTO.getName());
-        athlete.setDateOfBirth(registrationDTO.getDateOfBirth());
         athlete.setAge(age);
+        athlete.setDateOfBirth(registrationDTO.getDateOfBirth()); // Optional
         athlete.setGender(gender);
         athlete.setBeltRank(registrationDTO.getBeltRank());
         athlete.setWeight(registrationDTO.getWeight());
-        athlete.setTeam(registrationDTO.getTeam());
-        athlete.setCoachName(registrationDTO.getCoachName());
-        athlete.setEmail(registrationDTO.getEmail());
-        athlete.setPhone(registrationDTO.getPhone());
-        athlete.setExperienceNotes(registrationDTO.getExperienceNotes());
-        
+        athlete.setTeam(registrationDTO.getTeam()); // Will get default in @PrePersist if null
+        athlete.setCoachName(registrationDTO.getCoachName()); // Will get default in @PrePersist if null
+        athlete.setEmail(registrationDTO.getEmail()); // Optional
+        athlete.setPhone(registrationDTO.getPhone()); // Optional
+        athlete.setExperienceNotes(registrationDTO.getExperienceNotes()); // Optional
+
         Athlete savedAthlete = athleteRepository.save(athlete);
         log.info("Successfully registered athlete with ID: {}", savedAthlete.getId());
-        
+
         return savedAthlete;
     }
     

@@ -11,7 +11,7 @@ import java.time.LocalDate;
 
 /**
  * DTO for athlete registration request
- * Used when registering a new athlete for a tournament
+ * Simplified form: only essential fields required
  */
 @Data
 @NoArgsConstructor
@@ -22,9 +22,13 @@ public class AthleteRegistrationDTO {
     @Size(min = 2, max = 100, message = "Name must be between 2 and 100 characters")
     private String name;
 
-    @NotNull(message = "Date of birth is required")
+    @NotNull(message = "Age is required")
+    @Min(value = 4, message = "Athlete must be at least 4 years old")
+    @Max(value = 150, message = "Invalid age")
+    private Integer age;
+
     @Past(message = "Date of birth must be in the past")
-    private LocalDate dateOfBirth;
+    private LocalDate dateOfBirth; // Optional - calculated from age if not provided
 
     private Gender gender; // Optional, will be set to NOT_APPLICABLE for kids under 10
 
@@ -37,18 +41,17 @@ public class AthleteRegistrationDTO {
     private Double weight;
 
     @Size(max = 100, message = "Team name must be less than 100 characters")
-    private String team;
+    private String team; // Defaults to "Takedown Martial Arts"
 
     @Size(max = 100, message = "Coach name must be less than 100 characters")
-    private String coachName;
+    private String coachName; // Defaults to "Pedro Monteiro"
 
-    @NotBlank(message = "Email is required")
     @Email(message = "Invalid email format")
-    private String email;
+    private String email; // Optional
 
     @Pattern(regexp = "^$|^[+]?[0-9]{10,15}$", message = "Invalid phone number format")
-    private String phone;
+    private String phone; // Optional
 
     @Size(max = 500, message = "Experience notes must be less than 500 characters")
-    private String experienceNotes;
+    private String experienceNotes; // Optional
 }

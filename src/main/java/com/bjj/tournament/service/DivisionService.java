@@ -8,6 +8,7 @@ import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.entity.Division;
 import com.bjj.tournament.entity.Match;
 import com.bjj.tournament.entity.Tournament;
+import com.bjj.tournament.enums.BracketType;
 import com.bjj.tournament.repository.AthleteRepository;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
@@ -377,7 +378,7 @@ public class DivisionService {
         }
 
         // Determine positions based on bracket structure
-        assignMedalPositions(matches, athleteStats);
+        assignMedalPositions(division, matches, athleteStats);
 
         // Sort by position, then by wins, then by total points
         return athleteStats.values().stream()
@@ -399,7 +400,36 @@ public class DivisionService {
         return ranking;
     }
 
-    private void assignMedalPositions(List<Match> matches, Map<Long, AthleteRankingDTO> athleteStats) {
+    private void assignMedalPositions(Division division, List<Match> matches, Map<Long, AthleteRankingDTO> athleteStats) {
+        // For ROUND_ROBIN, rank by wins and total points
+        if (division.getBracketType() == BracketType.ROUND_ROBIN) {
+            log.info("Assigning positions for ROUND_ROBIN bracket");
+
+            // Sort athletes by wins (desc), then total points (desc)
+            List<AthleteRankingDTO> sortedAthletes = athleteStats.values().stream()
+                .sorted(Comparator.comparing(AthleteRankingDTO::getWins).reversed()
+                    .thenComparing(Comparator.comparing(AthleteRankingDTO::getTotalPoints).reversed()))
+                .collect(Collectors.toList());
+
+            // Assign positions and medals
+            for (int i = 0; i < sortedAthletes.size(); i++) {
+                AthleteRankingDTO athlete = sortedAthletes.get(i);
+                athlete.setPosition(i + 1);
+
+                if (i == 0) {
+                    athlete.setMedal("GOLD");
+                } else if (i == 1) {
+                    athlete.setMedal("SILVER");
+                } else if (i == 2) {
+                    athlete.setMedal("BRONZE");
+                }
+            }
+
+            log.info("Assigned {} positions for round-robin", sortedAthletes.size());
+            return;
+        }
+
+        // For ELIMINATION brackets, use traditional bracket logic
         // Find the finals match (highest round number - this is the championship match)
         Optional<Match> finalsMatch = matches.stream()
             .filter(m -> m.getWinner() != null)
@@ -445,7 +475,7 @@ public class DivisionService {
                 }
             }
 
-            log.info("Assigned medals for division: 1 Gold, 1 Silver, {} Bronze", bronzeCount);
+            log.info("Assigned medals for elimination bracket: 1 Gold, 1 Silver, {} Bronze", bronzeCount);
         } else {
             log.warn("No completed finals match found - cannot assign medal positions");
         }
