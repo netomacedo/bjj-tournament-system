@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/tournaments")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = "*")
 public class TournamentController {
     
     private final TournamentService tournamentService;

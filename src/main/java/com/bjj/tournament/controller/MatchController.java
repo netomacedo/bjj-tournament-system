@@ -18,7 +18,6 @@ import java.util.List;
 @RequestMapping("/api")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = "*")
 public class MatchController {
 
     private final MatchService matchService;

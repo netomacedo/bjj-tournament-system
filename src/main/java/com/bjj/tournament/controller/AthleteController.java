@@ -21,7 +21,6 @@ import java.util.List;
 @RequestMapping("/api/athletes")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = "*") // Allow CORS for React frontend
 public class AthleteController {
     
     private final AthleteService athleteService;
