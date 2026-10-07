@@ -26,12 +26,15 @@ public enum WeightClass {
     ADULT_FEMALE_HEAVY("Heavy", 79.3, Gender.FEMALE, true),
     ADULT_FEMALE_SUPER_HEAVY("Super Heavy", 999.9, Gender.FEMALE, true), // No upper limit
     
-    // Kids weight classes (simplified)
-    KIDS_LIGHT("Light", 30.0, Gender.NOT_APPLICABLE, false),
-    KIDS_MIDDLE("Middle", 37.0, Gender.NOT_APPLICABLE, false),
-    KIDS_MEDIUM_HEAVY("Medium Heavy", 44.0, Gender.NOT_APPLICABLE, false),
-    KIDS_HEAVY("Heavy", 52.0, Gender.NOT_APPLICABLE, false),
-    KIDS_SUPER_HEAVY("Super Heavy", 999.9, Gender.NOT_APPLICABLE, false);
+    // Kids weight classes (kg cutoffs)
+    KIDS_20("20kg", 20.0, Gender.NOT_APPLICABLE, false),
+    KIDS_25("25kg", 25.0, Gender.NOT_APPLICABLE, false),
+    KIDS_30("30kg", 30.0, Gender.NOT_APPLICABLE, false),
+    KIDS_35("35kg", 35.0, Gender.NOT_APPLICABLE, false),
+    KIDS_40("40kg", 40.0, Gender.NOT_APPLICABLE, false),
+    KIDS_45("45kg", 45.0, Gender.NOT_APPLICABLE, false),
+    KIDS_50("50kg", 50.0, Gender.NOT_APPLICABLE, false),
+    KIDS_50_PLUS("50kg+", 999.9, Gender.NOT_APPLICABLE, false); // No upper limit
     
     private final String displayName;
     private final double maxWeightKg;
@@ -57,9 +60,9 @@ public enum WeightClass {
             }
         }
         // Return heaviest class if no match found
-        return isAdult ? 
+        return isAdult ?
                (gender == Gender.MALE ? ADULT_MALE_ULTRA_HEAVY : ADULT_FEMALE_SUPER_HEAVY) :
-               KIDS_SUPER_HEAVY;
+               KIDS_50_PLUS;
     }
     
     public String getDisplayName() {
