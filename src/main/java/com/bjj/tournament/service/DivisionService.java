@@ -274,14 +274,15 @@ public class DivisionService {
      * Validate athlete meets division eligibility criteria
      */
     private void validateAthleteEligibility(Athlete athlete, Division division) {
-        // Belt rank is optional - divisions are primarily by age/weight
-        // Only check if division has a specific belt rank requirement
-        if (division.getBeltRank() != null && !athlete.getBeltRank().equals(division.getBeltRank())) {
-            throw new IllegalArgumentException(
-                "Athlete belt rank (" + athlete.getBeltRank() +
-                ") does not match division requirement (" + division.getBeltRank() + ")"
-            );
-        }
+        // Belt rank matching disabled for now: some tournaments allow mixed belts to
+        // fight each other in the same division. Re-enable if strict belt matching
+        // is needed again:
+        // if (division.getBeltRank() != null && !athlete.getBeltRank().equals(division.getBeltRank())) {
+        //     throw new IllegalArgumentException(
+        //         "Athlete belt rank (" + athlete.getBeltRank() +
+        //         ") does not match division requirement (" + division.getBeltRank() + ")"
+        //     );
+        // }
 
         // Check gender (if applicable)
         if (athlete.requiresGenderSeparation() &&

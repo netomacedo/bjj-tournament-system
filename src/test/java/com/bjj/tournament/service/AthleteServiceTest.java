@@ -310,7 +310,27 @@ class AthleteServiceTest {
         verify(athleteRepository, times(1)).findById(1L);
         verify(athleteRepository, times(1)).save(any(Athlete.class));
     }
-    
+
+    @Test
+    void testUpdateAthlete_WithNewBeltRankAgeAndGender_ShouldPersistThem() {
+        // Given - savedAthlete starts as BLUE belt, MALE, age 29
+        AthleteRegistrationDTO updateDTO = new AthleteRegistrationDTO();
+        updateDTO.setBeltRank(BeltRank.PURPLE);
+        updateDTO.setGender(Gender.FEMALE);
+        updateDTO.setAge(30);
+
+        when(athleteRepository.findById(1L)).thenReturn(Optional.of(savedAthlete));
+        when(athleteRepository.save(any(Athlete.class))).thenReturn(savedAthlete);
+
+        // When
+        Athlete result = athleteService.updateAthlete(1L, updateDTO);
+
+        // Then
+        assertThat(result.getBeltRank()).isEqualTo(BeltRank.PURPLE);
+        assertThat(result.getGender()).isEqualTo(Gender.FEMALE);
+        assertThat(result.getAge()).isEqualTo(30);
+    }
+
     @Test
     void testDeleteAthlete_WhenExists_ShouldSucceed() {
         // Given

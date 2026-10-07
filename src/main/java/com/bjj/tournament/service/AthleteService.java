@@ -177,6 +177,15 @@ public class AthleteService {
         if (updateDTO.getName() != null) {
             athlete.setName(updateDTO.getName());
         }
+        if (updateDTO.getAge() != null) {
+            athlete.setAge(updateDTO.getAge());
+        }
+        if (updateDTO.getGender() != null) {
+            athlete.setGender(updateDTO.getGender());
+        }
+        if (updateDTO.getBeltRank() != null) {
+            athlete.setBeltRank(updateDTO.getBeltRank());
+        }
         if (updateDTO.getWeight() != null) {
             athlete.setWeight(updateDTO.getWeight());
         }

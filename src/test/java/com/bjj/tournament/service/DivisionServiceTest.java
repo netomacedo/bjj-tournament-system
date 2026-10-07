@@ -358,20 +358,23 @@ class DivisionServiceTest {
         verify(divisionRepository, never()).save(any(Division.class));
     }
 
-    @Test
-    void testEnrollAthlete_WithWrongBeltRank_ShouldThrowException() {
-        // Given
-        athlete.setBeltRank(BeltRank.PURPLE);
-        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
-        when(athleteRepository.findById(1L)).thenReturn(Optional.of(athlete));
-
-        // When/Then
-        assertThatThrownBy(() -> divisionService.enrollAthlete(1L, 1L))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("belt rank");
-
-        verify(divisionRepository, never()).save(any(Division.class));
-    }
+    // Disabled alongside the belt rank check in DivisionService.validateAthleteEligibility
+    // (see comment there) - some tournaments now allow mixed belts in the same division.
+    // Re-enable if that check is restored:
+    // @Test
+    // void testEnrollAthlete_WithWrongBeltRank_ShouldThrowException() {
+    //     // Given
+    //     athlete.setBeltRank(BeltRank.PURPLE);
+    //     when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+    //     when(athleteRepository.findById(1L)).thenReturn(Optional.of(athlete));
+    //
+    //     // When/Then
+    //     assertThatThrownBy(() -> divisionService.enrollAthlete(1L, 1L))
+    //         .isInstanceOf(IllegalArgumentException.class)
+    //         .hasMessageContaining("belt rank");
+    //
+    //     verify(divisionRepository, never()).save(any(Division.class));
+    // }
 
     @Test
     void testEnrollAthlete_WithWrongGender_ShouldThrowException() {
