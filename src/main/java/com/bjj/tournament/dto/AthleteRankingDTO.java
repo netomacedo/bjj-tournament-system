@@ -19,4 +19,5 @@ public class AthleteRankingDTO {
     private Integer wins;
     private Integer losses;
     private Integer totalPoints;
+    private Integer submissionWins; // wins by submission, used as a tiebreaker ahead of points
 }

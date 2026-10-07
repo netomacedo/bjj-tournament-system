@@ -111,14 +111,13 @@ class SecurityConfigIntegrationTest {
     @Test
     void fullAuthenticationFlow_RegisterLoginAndAccessProtectedEndpoint() throws Exception {
         // Step 1: Register
-        MvcResult registerResult = mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.token", notNullValue()))
                 .andExpect(jsonPath("$.username", is("integrationtest")))
-                .andExpect(jsonPath("$.role", is("ROLE_USER")))
-                .andReturn();
+                .andExpect(jsonPath("$.role", is("ROLE_USER")));
 
         // Step 2: Login with same credentials
         MvcResult loginResult = mockMvc.perform(post("/api/auth/login")

@@ -4,7 +4,6 @@ import com.bjj.tournament.dto.AthleteRegistrationDTO;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.enums.BeltRank;
 import com.bjj.tournament.enums.Gender;
-import com.bjj.tournament.repository.AthleteRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,9 +26,6 @@ class AthleteServiceSimplifiedTest {
 
     @Autowired
     private AthleteService athleteService;
-
-    @Autowired
-    private AthleteRepository athleteRepository;
 
     @Test
     @DisplayName("Should register athlete with only essential fields (age, name, belt, weight)")

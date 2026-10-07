@@ -367,6 +367,9 @@ public class DivisionService {
                 winnerStats.setTotalPoints(winnerStats.getTotalPoints() +
                     (winnerId.equals(match.getAthlete1().getId()) ?
                         match.getAthlete1Points() : match.getAthlete2Points()));
+                if (Boolean.TRUE.equals(match.getFinishedBySubmission())) {
+                    winnerStats.setSubmissionWins(winnerStats.getSubmissionWins() + 1);
+                }
 
                 // Update loser stats
                 AthleteRankingDTO loserStats = athleteStats.get(loserId);
@@ -380,11 +383,12 @@ public class DivisionService {
         // Determine positions based on bracket structure
         assignMedalPositions(division, matches, athleteStats);
 
-        // Sort by position, then by wins, then by total points
+        // Sort by position, then by wins, then by submission wins, then by total points
         return athleteStats.values().stream()
             .filter(ranking -> ranking.getPosition() != null)
             .sorted(Comparator.comparing(AthleteRankingDTO::getPosition)
                 .thenComparing(Comparator.comparing(AthleteRankingDTO::getWins).reversed())
+                .thenComparing(Comparator.comparing(AthleteRankingDTO::getSubmissionWins).reversed())
                 .thenComparing(Comparator.comparing(AthleteRankingDTO::getTotalPoints).reversed()))
             .collect(Collectors.toList());
     }
@@ -397,31 +401,41 @@ public class DivisionService {
         ranking.setWins(0);
         ranking.setLosses(0);
         ranking.setTotalPoints(0);
+        ranking.setSubmissionWins(0);
         return ranking;
     }
 
     private void assignMedalPositions(Division division, List<Match> matches, Map<Long, AthleteRankingDTO> athleteStats) {
-        // For ROUND_ROBIN, rank by wins and total points
+        // For ROUND_ROBIN, rank by wins, then submission wins, then total points
         if (division.getBracketType() == BracketType.ROUND_ROBIN) {
             log.info("Assigning positions for ROUND_ROBIN bracket");
 
-            // Sort athletes by wins (desc), then total points (desc)
+            // Sort athletes by wins (desc), then submission wins (desc), then total points (desc).
+            // Submission wins rank ahead of points: a fighter who finished an opponent outranks
+            // one who merely out-pointed theirs, even with equal win counts.
             List<AthleteRankingDTO> sortedAthletes = athleteStats.values().stream()
                 .sorted(Comparator.comparing(AthleteRankingDTO::getWins).reversed()
+                    .thenComparing(Comparator.comparing(AthleteRankingDTO::getSubmissionWins).reversed())
                     .thenComparing(Comparator.comparing(AthleteRankingDTO::getTotalPoints).reversed()))
                 .collect(Collectors.toList());
 
-            // Assign positions and medals
+            // Assign positions and medals. 3rd place is shared by the two athletes tied
+            // at that rank (indices 2 and 3), matching the two-bronze elimination behavior.
+            // Positions below that are not skipped (e.g. 5th-ranked athlete is position 4).
             for (int i = 0; i < sortedAthletes.size(); i++) {
                 AthleteRankingDTO athlete = sortedAthletes.get(i);
-                athlete.setPosition(i + 1);
 
                 if (i == 0) {
+                    athlete.setPosition(1);
                     athlete.setMedal("GOLD");
                 } else if (i == 1) {
+                    athlete.setPosition(2);
                     athlete.setMedal("SILVER");
-                } else if (i == 2) {
+                } else if (i == 2 || i == 3) {
+                    athlete.setPosition(3);
                     athlete.setMedal("BRONZE");
+                } else {
+                    athlete.setPosition(i);
                 }
             }
 

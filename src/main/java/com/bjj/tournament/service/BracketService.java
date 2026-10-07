@@ -3,7 +3,6 @@ package com.bjj.tournament.service;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.entity.Division;
 import com.bjj.tournament.entity.Match;
-import com.bjj.tournament.enums.BracketType;
 import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
@@ -130,7 +129,8 @@ public class BracketService {
             match.setStatus(MatchStatus.PENDING);
             match.setRoundNumber(1); // First round for manual generation
             match.setMatchPosition(matchPosition++);
-            
+            match.setDurationSeconds(getMatchDurationSeconds(division));
+
             matches.add(match);
         }
         
@@ -176,7 +176,8 @@ public class BracketService {
             match.setRoundNumber(1);
             match.setMatchPosition(matchPosition++);
             match.setStatus(match.getStatus() == null ? MatchStatus.PENDING : match.getStatus());
-            
+            match.setDurationSeconds(getMatchDurationSeconds(division));
+
             matches.add(match);
         }
         
@@ -195,8 +196,9 @@ public class BracketService {
                 match.setRoundNumber(roundNumber);
                 match.setMatchPosition(matchPosition++);
                 match.setStatus(MatchStatus.PENDING);
+                match.setDurationSeconds(getMatchDurationSeconds(division));
                 // Athletes will be set as previous matches complete
-                
+
                 matches.add(match);
             }
             
@@ -247,7 +249,8 @@ public class BracketService {
                 match.setRoundNumber(1); // All matches are in "round 1" for round robin
                 match.setMatchPosition(matchPosition++);
                 match.setStatus(MatchStatus.PENDING);
-                
+                match.setDurationSeconds(getMatchDurationSeconds(division));
+
                 matches.add(match);
             }
         }
@@ -310,9 +313,16 @@ public class BracketService {
                 // Even match position goes to athlete2 slot
                 nextMatch.setAthlete2(winner);
             }
-            
+
             matchRepository.save(nextMatch);
             log.info("Winner advanced to next round match ID: {}", nextMatch.getId());
         }
+    }
+
+    /**
+     * Allotted match duration for a division, derived from its age category
+     */
+    private Integer getMatchDurationSeconds(Division division) {
+        return division.getAgeCategory().getMatchDurationMinutes() * 60;
     }
 }

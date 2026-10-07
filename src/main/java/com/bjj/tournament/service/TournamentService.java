@@ -2,11 +2,7 @@ package com.bjj.tournament.service;
 
 import com.bjj.tournament.dto.TournamentCreateDTO;
 import com.bjj.tournament.entity.Tournament;
-import com.bjj.tournament.entity.Division;
-import com.bjj.tournament.entity.Match;
 import com.bjj.tournament.repository.TournamentRepository;
-import com.bjj.tournament.repository.DivisionRepository;
-import com.bjj.tournament.repository.MatchRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,8 +23,6 @@ public class TournamentService {
 
     private final TournamentRepository tournamentRepository;
     private final EntityManager entityManager;
-    private final MatchRepository matchRepository;
-    private final DivisionRepository divisionRepository;
     
     /**
      * Create a new tournament

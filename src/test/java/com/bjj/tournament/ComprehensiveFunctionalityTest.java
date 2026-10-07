@@ -9,7 +9,6 @@ import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -208,7 +207,6 @@ class ComprehensiveFunctionalityTest {
     @DisplayName("Should create athlete and persist to database")
     void testAthleteCreation() {
         // Given
-        Tournament tournament = createTestTournament();
         AthleteRegistrationDTO registrationDTO = new AthleteRegistrationDTO();
         registrationDTO.setName("Test Athlete");
         registrationDTO.setEmail("athlete@test.com");
@@ -380,7 +378,6 @@ class ComprehensiveFunctionalityTest {
         // Given - tournament with divisions and matches
         Tournament tournament = createTestTournament();
         Division division1 = createTestDivision(tournament);
-        Division division2 = createTestDivisionWithCustomData(tournament, BeltRank.PURPLE);
 
         Athlete a1 = createTestAthlete("A1", "a1@test.com");
         Athlete a2 = createTestAthlete("A2", "a2@test.com");

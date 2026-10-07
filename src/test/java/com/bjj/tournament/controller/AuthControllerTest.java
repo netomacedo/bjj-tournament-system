@@ -1,6 +1,5 @@
 package com.bjj.tournament.controller;
 
-import com.bjj.tournament.dto.AuthResponseDTO;
 import com.bjj.tournament.dto.LoginRequestDTO;
 import com.bjj.tournament.dto.UserRegistrationDTO;
 import com.bjj.tournament.entity.User;
@@ -12,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -379,9 +377,6 @@ class AuthControllerTest {
     @WithMockUser(username = "testuser")
     void refreshToken_WithValidAuthentication_ReturnsNewToken() throws Exception {
         // Given
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                testUser, null, testUser.getAuthorities()
-        );
         String newToken = "refreshed.jwt.token";
 
         when(tokenProvider.generateToken(any(Authentication.class))).thenReturn(newToken);

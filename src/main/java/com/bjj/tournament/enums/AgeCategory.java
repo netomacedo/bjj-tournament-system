@@ -6,11 +6,11 @@ package com.bjj.tournament.enums;
  */
 public enum AgeCategory {
     // Kids categories
-    MIGHTY_MITE("Mighty Mite", 4, 5, 3),      // 4-5 years, 3 min matches
+    MIGHTY_MITE("Mighty Mite", 4, 5, 2),      // 4-5 years, 2 min matches
     TINY_TOT("Tiny Tot", 6, 7, 3),            // 6-7 years, 3 min matches
-    WEE_ONE("Wee One", 8, 9, 4),              // 8-9 years, 4 min matches
-    LITTLE_ONE("Little One", 10, 12, 4),      // 10-12 years, 4 min matches
-    PRE_TEEN("Pre-Teen", 13, 15, 5),          // 13-15 years, 5 min matches
+    WEE_ONE("Wee One", 8, 9, 3),              // 8-9 years, 3 min matches
+    LITTLE_ONE("Little One", 10, 12, 3),      // 10-12 years, 3 min matches
+    PRE_TEEN("Pre-Teen", 13, 15, 3),          // 13-15 years, 3 min matches
     
     // Juvenile and Adult categories
     JUVENILE("Juvenile", 16, 17, 5),          // 16-17 years, 5 min matches
