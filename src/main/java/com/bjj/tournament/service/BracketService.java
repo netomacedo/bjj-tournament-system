@@ -231,31 +231,87 @@ public class BracketService {
     
     /**
      * Generate round robin bracket
-     * Every athlete fights every other athlete
+     * Every athlete fights every other athlete, ordered so athletes get a
+     * rest between their own matches instead of fighting repeatedly in a row.
      */
     private List<Match> generateRoundRobinBracket(Division division, List<Athlete> athletes) {
         List<Match> matches = new ArrayList<>();
-        
-        int numAthletes = athletes.size();
-        int matchPosition = 1;
-        
-        // Generate all possible matchups
-        for (int i = 0; i < numAthletes; i++) {
-            for (int j = i + 1; j < numAthletes; j++) {
-                Match match = new Match();
-                match.setDivision(division);
-                match.setAthlete1(athletes.get(i));
-                match.setAthlete2(athletes.get(j));
-                match.setRoundNumber(1); // All matches are in "round 1" for round robin
-                match.setMatchPosition(matchPosition++);
-                match.setStatus(MatchStatus.PENDING);
-                match.setDurationSeconds(getMatchDurationSeconds(division));
 
-                matches.add(match);
+        List<Athlete[]> orderedPairs = orderRoundRobinPairsForRest(athletes);
+
+        int matchPosition = 1;
+        for (Athlete[] pair : orderedPairs) {
+            Match match = new Match();
+            match.setDivision(division);
+            match.setAthlete1(pair[0]);
+            match.setAthlete2(pair[1]);
+            match.setRoundNumber(1); // All matches are in "round 1" for round robin
+            match.setMatchPosition(matchPosition++);
+            match.setStatus(MatchStatus.PENDING);
+            match.setDurationSeconds(getMatchDurationSeconds(division));
+
+            matches.add(match);
+        }
+
+        return matches;
+    }
+
+    /**
+     * Orders every unique athlete pairing so that, at each step, we greedily pick
+     * whichever remaining pair avoids repeating an athlete from the immediately
+     * previous match; among equally valid options, we prefer whoever has rested
+     * longest since their last match. A back-to-back repeat is sometimes
+     * mathematically unavoidable (every "round" of a round-robin uses every
+     * athlete, so round transitions can force an immediate rematch), but this
+     * keeps such repeats to the minimum possible instead of letting one athlete
+     * fight several matches in a row like naive pairing order does.
+     */
+    private List<Athlete[]> orderRoundRobinPairsForRest(List<Athlete> athletes) {
+        List<Athlete[]> remainingPairs = new ArrayList<>();
+        for (int i = 0; i < athletes.size(); i++) {
+            for (int j = i + 1; j < athletes.size(); j++) {
+                remainingPairs.add(new Athlete[]{athletes.get(i), athletes.get(j)});
             }
         }
-        
-        return matches;
+
+        Map<Long, Integer> lastPlayedAtStep = new HashMap<>();
+        Set<Long> lastMatchAthleteIds = Collections.emptySet();
+        List<Athlete[]> orderedPairs = new ArrayList<>();
+
+        int step = 0;
+        while (!remainingPairs.isEmpty()) {
+            Athlete[] best = null;
+            int bestRest = Integer.MIN_VALUE;
+            boolean bestConflicts = true;
+
+            for (Athlete[] pair : remainingPairs) {
+                boolean conflicts = lastMatchAthleteIds.contains(pair[0].getId())
+                    || lastMatchAthleteIds.contains(pair[1].getId());
+                int rest = step - Math.max(
+                    lastPlayedAtStep.getOrDefault(pair[0].getId(), Integer.MIN_VALUE / 2),
+                    lastPlayedAtStep.getOrDefault(pair[1].getId(), Integer.MIN_VALUE / 2)
+                );
+
+                boolean better = best == null
+                    || (bestConflicts && !conflicts)
+                    || (conflicts == bestConflicts && rest > bestRest);
+
+                if (better) {
+                    best = pair;
+                    bestRest = rest;
+                    bestConflicts = conflicts;
+                }
+            }
+
+            orderedPairs.add(best);
+            remainingPairs.remove(best);
+            lastPlayedAtStep.put(best[0].getId(), step);
+            lastPlayedAtStep.put(best[1].getId(), step);
+            lastMatchAthleteIds = Set.of(best[0].getId(), best[1].getId());
+            step++;
+        }
+
+        return orderedPairs;
     }
     
     /**

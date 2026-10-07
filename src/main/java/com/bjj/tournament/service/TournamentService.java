@@ -59,6 +59,40 @@ public class TournamentService {
     }
     
     /**
+     * Update an existing tournament
+     */
+    @Transactional
+    public Tournament updateTournament(Long id, TournamentCreateDTO updateDTO) {
+        log.info("Updating tournament ID: {}", id);
+
+        Tournament tournament = tournamentRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Tournament not found with ID: " + id));
+
+        if (updateDTO.getTournamentDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Tournament date must be in the future");
+        }
+
+        if (updateDTO.getRegistrationDeadline() != null &&
+            updateDTO.getRegistrationDeadline().isAfter(updateDTO.getTournamentDate())) {
+            throw new IllegalArgumentException("Registration deadline must be before tournament date");
+        }
+
+        tournament.setName(updateDTO.getName());
+        tournament.setDescription(updateDTO.getDescription());
+        tournament.setLocation(updateDTO.getLocation());
+        tournament.setTournamentDate(updateDTO.getTournamentDate());
+        tournament.setRegistrationDeadline(updateDTO.getRegistrationDeadline());
+        tournament.setOrganizer(updateDTO.getOrganizer());
+        tournament.setContactEmail(updateDTO.getContactEmail());
+        tournament.setRules(updateDTO.getRules());
+
+        Tournament savedTournament = tournamentRepository.save(tournament);
+        log.info("Successfully updated tournament ID: {}", savedTournament.getId());
+
+        return savedTournament;
+    }
+
+    /**
      * Get tournament by ID
      */
     @Transactional(readOnly = true)

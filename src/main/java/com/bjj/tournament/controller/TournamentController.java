@@ -62,6 +62,17 @@ public class TournamentController {
     }
     
     /**
+     * Update an existing tournament
+     * PUT /api/tournaments/{id}
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<Tournament> updateTournament(@PathVariable Long id, @Valid @RequestBody TournamentCreateDTO updateDTO) {
+        log.info("REST request to update tournament ID: {}", id);
+        Tournament tournament = tournamentService.updateTournament(id, updateDTO);
+        return ResponseEntity.ok(tournament);
+    }
+
+    /**
      * Get upcoming tournaments
      * GET /api/tournaments/upcoming
      */
