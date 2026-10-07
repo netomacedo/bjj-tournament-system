@@ -102,8 +102,9 @@ class DivisionServiceTest {
     void testCreateDivision_WithValidData_ShouldSucceed() {
         // Given
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
-        when(divisionRepository.findByTournamentIdAndBeltRankAndAgeCategoryAndGender(
-            anyLong(), any(), any(), any())).thenReturn(Optional.empty());
+        // Restore alongside the duplicate-criteria check in DivisionService if re-enabled:
+        // when(divisionRepository.findByTournamentIdAndBeltRankAndAgeCategoryAndGender(
+        //     anyLong(), any(), any(), any())).thenReturn(Optional.empty());
         when(divisionRepository.save(any(Division.class))).thenReturn(division);
 
         // When
@@ -160,20 +161,22 @@ class DivisionServiceTest {
         verify(divisionRepository, never()).save(any(Division.class));
     }
 
-    @Test
-    void testCreateDivision_WithDuplicateCriteria_ShouldThrowException() {
-        // Given
-        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
-        when(divisionRepository.findByTournamentIdAndBeltRankAndAgeCategoryAndGender(
-            anyLong(), any(), any(), any())).thenReturn(Optional.of(division));
-
-        // When/Then
-        assertThatThrownBy(() -> divisionService.createDivision(1L, createDTO))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Division already exists");
-
-        verify(divisionRepository, never()).save(any(Division.class));
-    }
+    // Disabled alongside the duplicate-criteria check in DivisionService (see comment there).
+    // Re-enable if that check is restored:
+    // @Test
+    // void testCreateDivision_WithDuplicateCriteria_ShouldThrowException() {
+    //     // Given
+    //     when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+    //     when(divisionRepository.findByTournamentIdAndBeltRankAndAgeCategoryAndGender(
+    //         anyLong(), any(), any(), any())).thenReturn(Optional.of(division));
+    //
+    //     // When/Then
+    //     assertThatThrownBy(() -> divisionService.createDivision(1L, createDTO))
+    //         .isInstanceOf(IllegalArgumentException.class)
+    //         .hasMessageContaining("Division already exists");
+    //
+    //     verify(divisionRepository, never()).save(any(Division.class));
+    // }
 
     // ============ GET DIVISION TESTS ============
 

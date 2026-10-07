@@ -56,19 +56,21 @@ public class DivisionService {
             throw new IllegalStateException("Cannot create divisions after tournament has started");
         }
 
-        // Check if division with same criteria already exists
-        divisionRepository.findByTournamentIdAndBeltRankAndAgeCategoryAndGender(
-            tournamentId,
-            createDTO.getBeltRank(),
-            createDTO.getAgeCategory(),
-            createDTO.getGender()
-        ).ifPresent(d -> {
-            throw new IllegalArgumentException(
-                "Division already exists for this tournament with belt rank: " +
-                createDTO.getBeltRank() + ", age category: " + createDTO.getAgeCategory() +
-                ", and gender: " + createDTO.getGender()
-            );
-        });
+        // Duplicate-criteria check disabled for now: organizers sometimes intentionally
+        // split identical-criteria groups (same belt/age/gender) into separate divisions
+        // so each gets its own medal ceremony. Re-enable if needed:
+        // divisionRepository.findByTournamentIdAndBeltRankAndAgeCategoryAndGender(
+        //     tournamentId,
+        //     createDTO.getBeltRank(),
+        //     createDTO.getAgeCategory(),
+        //     createDTO.getGender()
+        // ).ifPresent(d -> {
+        //     throw new IllegalArgumentException(
+        //         "Division already exists for this tournament with belt rank: " +
+        //         createDTO.getBeltRank() + ", age category: " + createDTO.getAgeCategory() +
+        //         ", and gender: " + createDTO.getGender()
+        //     );
+        // });
 
         // Create division
         Division division = new Division();

@@ -21,12 +21,15 @@ import java.util.List;
  */
 @Entity
 @Table(name = "divisions",
-    uniqueConstraints = {
-        @UniqueConstraint(
-            name = "uk_division_criteria",
-            columnNames = {"tournament_id", "age_category", "gender", "weight_class"}
-        )
-    },
+    // Disabled for now: organizers sometimes intentionally split identical-criteria
+    // groups (same age/weight/gender/belt) into separate divisions so each gets its
+    // own medal ceremony. Re-enable if accidental-duplicate prevention is needed again:
+    // uniqueConstraints = {
+    //     @UniqueConstraint(
+    //         name = "uk_division_criteria",
+    //         columnNames = {"tournament_id", "age_category", "gender", "weight_class"}
+    //     )
+    // },
     indexes = {
         @Index(name = "idx_division_tournament", columnList = "tournament_id"),
         @Index(name = "idx_division_age", columnList = "age_category")
