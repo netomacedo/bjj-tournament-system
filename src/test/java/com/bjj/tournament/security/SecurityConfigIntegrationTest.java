@@ -48,10 +48,23 @@ class SecurityConfigIntegrationTest {
     private UserRegistrationDTO registrationDTO;
     private LoginRequestDTO loginRequest;
 
+    private static final String ADMIN_USERNAME = "bootstrap-admin";
+    private static final String ADMIN_PASSWORD = "adminpass123";
+
     @BeforeEach
     void setUp() {
         // Clean up any existing test users
         userRepository.deleteAll();
+
+        // Registration now requires an existing admin (self-registration is disabled),
+        // so seed one directly via the repository, bypassing the HTTP endpoint.
+        User admin = new User();
+        admin.setUsername(ADMIN_USERNAME);
+        admin.setEmail("bootstrap-admin@test.com");
+        admin.setPassword(passwordEncoder.encode(ADMIN_PASSWORD));
+        admin.setFullName("Bootstrap Admin");
+        admin.setRole("ROLE_ADMIN");
+        userRepository.save(admin);
 
         // Create registration DTO
         registrationDTO = new UserRegistrationDTO();
@@ -66,10 +79,38 @@ class SecurityConfigIntegrationTest {
         loginRequest.setPassword("password123");
     }
 
+    /**
+     * Logs in as the seeded admin and returns its JWT, needed to call the
+     * now admin-gated /api/auth/register endpoint from tests.
+     */
+    private String getAdminToken() throws Exception {
+        LoginRequestDTO adminLogin = new LoginRequestDTO();
+        adminLogin.setUsername(ADMIN_USERNAME);
+        adminLogin.setPassword(ADMIN_PASSWORD);
+
+        MvcResult result = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(adminLogin)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+    }
+
     @Test
-    void publicEndpoint_WithoutAuthentication_AllowsAccess() throws Exception {
+    void register_WithoutAuthentication_ReturnsForbidden() throws Exception {
+        // When/Then - self-registration is disabled; only an existing admin can register users
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registrationDTO)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void register_AsAdmin_AllowsAccess() throws Exception {
         // When/Then
         mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated());
@@ -86,6 +127,7 @@ class SecurityConfigIntegrationTest {
     void protectedEndpoint_WithValidToken_AllowsAccess() throws Exception {
         // Given - register and login to get token
         MvcResult result = mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated())
@@ -110,8 +152,9 @@ class SecurityConfigIntegrationTest {
 
     @Test
     void fullAuthenticationFlow_RegisterLoginAndAccessProtectedEndpoint() throws Exception {
-        // Step 1: Register
+        // Step 1: Register (as admin - self-registration is disabled)
         mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated())
@@ -148,6 +191,7 @@ class SecurityConfigIntegrationTest {
     void login_WithIncorrectPassword_ReturnsUnauthorized() throws Exception {
         // Given - register user first
         mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated());
@@ -183,6 +227,7 @@ class SecurityConfigIntegrationTest {
     void register_WithDuplicateUsername_ReturnsBadRequest() throws Exception {
         // Given - register user first
         mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated());
@@ -196,6 +241,7 @@ class SecurityConfigIntegrationTest {
 
         // Then
         mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(duplicateDTO)))
                 .andExpect(status().isBadRequest())
@@ -206,6 +252,7 @@ class SecurityConfigIntegrationTest {
     void passwordEncoding_PasswordIsEncoded() throws Exception {
         // Given/When - register user
         mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated());
@@ -237,6 +284,7 @@ class SecurityConfigIntegrationTest {
     void tokenExpiration_TokenContainsExpirationClaim() throws Exception {
         // Given/When - register and get token
         MvcResult result = mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated())
@@ -254,6 +302,7 @@ class SecurityConfigIntegrationTest {
     void logout_ClearsSecurityContext() throws Exception {
         // Given - register and login
         MvcResult result = mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated())
@@ -276,6 +325,7 @@ class SecurityConfigIntegrationTest {
     void userRole_NewUserGetsDefaultRole() throws Exception {
         // When
         MvcResult result = mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated())
@@ -296,6 +346,7 @@ class SecurityConfigIntegrationTest {
     void accountStatus_NewUserIsEnabledAndUnlocked() throws Exception {
         // When
         mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated());
@@ -310,6 +361,7 @@ class SecurityConfigIntegrationTest {
     void multipleTokens_EachLoginGeneratesUniqueToken() throws Exception {
         // Given - register user
         mockMvc.perform(post("/api/auth/register")
+                        .header("Authorization", "Bearer " + getAdminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registrationDTO)))
                 .andExpect(status().isCreated());

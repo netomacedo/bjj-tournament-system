@@ -53,6 +53,12 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        // Account creation and user listing require an existing admin -
+                        // self-registration is intentionally not public (must come before
+                        // the broader /api/auth/** permitAll rule below to take effect)
+                        .requestMatchers("/api/auth/register").hasRole("ADMIN")
+                        .requestMatchers("/api/auth/users/all").hasRole("ADMIN")
+
                         // Public endpoints - no authentication required
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
