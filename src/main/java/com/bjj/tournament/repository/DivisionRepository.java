@@ -18,9 +18,9 @@ import java.util.Optional;
 public interface DivisionRepository extends JpaRepository<Division, Long> {
     
     /**
-     * Find divisions by tournament ID
+     * Find divisions by tournament ID, in creation order
      */
-    List<Division> findByTournamentId(Long tournamentId);
+    List<Division> findByTournamentIdOrderByIdAsc(Long tournamentId);
     
     /**
      * Find division by tournament ID, belt rank, age category, and gender

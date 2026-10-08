@@ -209,7 +209,7 @@ class DivisionServiceTest {
     void testGetDivisionsByTournament_WithValidTournamentId_ShouldReturnList() {
         // Given
         when(tournamentRepository.existsById(1L)).thenReturn(true);
-        when(divisionRepository.findByTournamentId(1L)).thenReturn(Arrays.asList(division));
+        when(divisionRepository.findByTournamentIdOrderByIdAsc(1L)).thenReturn(Arrays.asList(division));
 
         // When
         List<DivisionResponseDTO> result = divisionService.getDivisionsByTournament(1L);
@@ -217,7 +217,7 @@ class DivisionServiceTest {
         // Then
         assertThat(result).isNotNull();
         assertThat(result).hasSize(1);
-        verify(divisionRepository, times(1)).findByTournamentId(1L);
+        verify(divisionRepository, times(1)).findByTournamentIdOrderByIdAsc(1L);
     }
 
     @Test

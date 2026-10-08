@@ -110,7 +110,7 @@ class DivisionRepositoryTest {
     @Test
     void testFindByTournamentId_ShouldReturnAllDivisionsForTournament() {
         // When
-        List<Division> divisions = divisionRepository.findByTournamentId(tournament.getId());
+        List<Division> divisions = divisionRepository.findByTournamentIdOrderByIdAsc(tournament.getId());
 
         // Then
         assertThat(divisions).hasSize(3);
@@ -121,7 +121,7 @@ class DivisionRepositoryTest {
     @Test
     void testFindByTournamentId_WithNonExistentTournament_ShouldReturnEmpty() {
         // When
-        List<Division> divisions = divisionRepository.findByTournamentId(999L);
+        List<Division> divisions = divisionRepository.findByTournamentIdOrderByIdAsc(999L);
 
         // Then
         assertThat(divisions).isEmpty();
@@ -280,7 +280,7 @@ class DivisionRepositoryTest {
     @Test
     void testFindByTournamentId_ShouldOrderDivisionsConsistently() {
         // When
-        List<Division> divisions = divisionRepository.findByTournamentId(tournament.getId());
+        List<Division> divisions = divisionRepository.findByTournamentIdOrderByIdAsc(tournament.getId());
 
         // Then
         assertThat(divisions).hasSize(3);

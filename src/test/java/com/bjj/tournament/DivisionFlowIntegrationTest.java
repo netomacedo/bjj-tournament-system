@@ -386,8 +386,8 @@ class DivisionFlowIntegrationTest {
             .andExpect(status().isCreated());
 
         // Verify both tournaments have their divisions
-        List<Division> tournament1Divisions = divisionRepository.findByTournamentId(tournament.getId());
-        List<Division> tournament2Divisions = divisionRepository.findByTournamentId(tournament2.getId());
+        List<Division> tournament1Divisions = divisionRepository.findByTournamentIdOrderByIdAsc(tournament.getId());
+        List<Division> tournament2Divisions = divisionRepository.findByTournamentIdOrderByIdAsc(tournament2.getId());
 
         assertThat(tournament1Divisions).hasSize(1);
         assertThat(tournament2Divisions).hasSize(1);

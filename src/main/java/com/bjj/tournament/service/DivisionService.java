@@ -108,7 +108,7 @@ public class DivisionService {
             throw new IllegalArgumentException("Tournament not found with ID: " + tournamentId);
         }
 
-        List<Division> divisions = divisionRepository.findByTournamentId(tournamentId);
+        List<Division> divisions = divisionRepository.findByTournamentIdOrderByIdAsc(tournamentId);
         return divisions.stream()
             .map(this::convertToResponseDTO)
             .collect(Collectors.toList());
