@@ -5,6 +5,7 @@ import com.bjj.tournament.entity.Division;
 import com.bjj.tournament.entity.Match;
 import com.bjj.tournament.enums.AgeCategory;
 import com.bjj.tournament.enums.BracketType;
+import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,13 +57,13 @@ class BracketServiceTest {
             athletes.add(athlete);
         }
         division.setAthletes(athletes);
-
-        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
-        when(matchRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
     void generateMatchesAutomatically_RoundRobin_NoAthleteFightsTwiceInARowMoreThanUnavoidable() {
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+        when(matchRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
         List<Match> matches = bracketService.generateMatchesAutomatically(1L);
 
         // Every unique pair must play exactly once
@@ -90,6 +91,9 @@ class BracketServiceTest {
 
     @Test
     void generateMatchesAutomatically_RoundRobin_EveryPairPlaysExactlyOnce() {
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+        when(matchRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
         List<Match> matches = bracketService.generateMatchesAutomatically(1L);
 
         List<String> pairs = matches.stream()
@@ -102,5 +106,112 @@ class BracketServiceTest {
 
         assertThat(pairs).containsExactlyInAnyOrder("1-2", "1-3", "1-4", "2-3", "2-4", "3-4");
         assertThat(pairs).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void advanceWinnerToNextRound_WithWalkoverMatch_DoesNotThrow() {
+        // A walkover-decided match must advance its winner just like a normally
+        // completed one - this was previously rejected since the status check
+        // only accepted MatchStatus.COMPLETED, silently breaking bracket
+        // progression for every walkover (the exception was swallowed by
+        // MatchService.recordWalkover's catch block). This exercises the
+        // elimination-bracket "no next round exists" path specifically.
+        division.setBracketType(BracketType.SINGLE_ELIMINATION);
+
+        Athlete winner = athletes.get(0);
+        Athlete loser = athletes.get(1);
+
+        Match walkoverMatch = new Match();
+        walkoverMatch.setId(10L);
+        walkoverMatch.setDivision(division);
+        walkoverMatch.setAthlete1(winner);
+        walkoverMatch.setAthlete2(loser);
+        walkoverMatch.setWinner(winner);
+        walkoverMatch.setStatus(MatchStatus.WALKOVER);
+        walkoverMatch.setRoundNumber(1);
+        walkoverMatch.setMatchPosition(1);
+
+        when(matchRepository.findById(10L)).thenReturn(Optional.of(walkoverMatch));
+        when(matchRepository.findByDivisionIdAndRoundNumber(1L, 2)).thenReturn(List.of());
+        when(divisionRepository.save(any(Division.class))).thenReturn(division);
+
+        bracketService.advanceWinnerToNextRound(10L, winner.getId());
+
+        assertThat(division.getCompleted()).isTrue();
+    }
+
+    @Test
+    void advanceWinnerToNextRound_RoundRobin_DoesNotMarkDivisionCompleteWhileMatchesRemain() {
+        // Round robin has no "next round" - all matches are scheduled upfront in
+        // round 1 ("all fight all"). Previously, finishing even the FIRST match
+        // of a round robin incorrectly marked the whole division "completed"
+        // (the elimination-style "no round 2 exists, so this was the final
+        // match" fallback fired for every round-robin completion).
+        Athlete a = athletes.get(0);
+        Athlete b = athletes.get(1);
+        Athlete c = athletes.get(2);
+        Athlete d = athletes.get(3);
+
+        Match decidedMatch = new Match();
+        decidedMatch.setId(20L);
+        decidedMatch.setDivision(division);
+        decidedMatch.setAthlete1(a);
+        decidedMatch.setAthlete2(b);
+        decidedMatch.setWinner(a);
+        decidedMatch.setStatus(MatchStatus.COMPLETED);
+        decidedMatch.setRoundNumber(1);
+        decidedMatch.setMatchPosition(1);
+
+        Match pendingMatch = new Match();
+        pendingMatch.setId(21L);
+        pendingMatch.setDivision(division);
+        pendingMatch.setAthlete1(c);
+        pendingMatch.setAthlete2(d);
+        pendingMatch.setStatus(MatchStatus.PENDING);
+        pendingMatch.setRoundNumber(1);
+        pendingMatch.setMatchPosition(2);
+
+        when(matchRepository.findById(20L)).thenReturn(Optional.of(decidedMatch));
+        when(matchRepository.findByDivisionIdAndRoundNumber(1L, 1))
+            .thenReturn(List.of(decidedMatch, pendingMatch));
+
+        bracketService.advanceWinnerToNextRound(20L, a.getId());
+
+        assertThat(division.getCompleted()).isFalse();
+    }
+
+    @Test
+    void advanceWinnerToNextRound_RoundRobin_MarksDivisionCompleteOnceEveryMatchIsDecided() {
+        Athlete a = athletes.get(0);
+        Athlete b = athletes.get(1);
+
+        Match lastMatch = new Match();
+        lastMatch.setId(22L);
+        lastMatch.setDivision(division);
+        lastMatch.setAthlete1(a);
+        lastMatch.setAthlete2(b);
+        lastMatch.setWinner(a);
+        lastMatch.setStatus(MatchStatus.COMPLETED);
+        lastMatch.setRoundNumber(1);
+        lastMatch.setMatchPosition(1);
+
+        Match alreadyDecidedMatch = new Match();
+        alreadyDecidedMatch.setId(23L);
+        alreadyDecidedMatch.setDivision(division);
+        alreadyDecidedMatch.setAthlete1(athletes.get(2));
+        alreadyDecidedMatch.setAthlete2(athletes.get(3));
+        alreadyDecidedMatch.setWinner(athletes.get(2));
+        alreadyDecidedMatch.setStatus(MatchStatus.COMPLETED);
+        alreadyDecidedMatch.setRoundNumber(1);
+        alreadyDecidedMatch.setMatchPosition(2);
+
+        when(matchRepository.findById(22L)).thenReturn(Optional.of(lastMatch));
+        when(matchRepository.findByDivisionIdAndRoundNumber(1L, 1))
+            .thenReturn(List.of(lastMatch, alreadyDecidedMatch));
+        when(divisionRepository.save(any(Division.class))).thenReturn(division);
+
+        bracketService.advanceWinnerToNextRound(22L, a.getId());
+
+        assertThat(division.getCompleted()).isTrue();
     }
 }

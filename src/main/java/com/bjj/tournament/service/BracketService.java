@@ -3,6 +3,7 @@ package com.bjj.tournament.service;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.entity.Division;
 import com.bjj.tournament.entity.Match;
+import com.bjj.tournament.enums.BracketType;
 import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
@@ -327,7 +328,8 @@ public class BracketService {
         Match completedMatch = matchRepository.findById(matchId)
             .orElseThrow(() -> new IllegalArgumentException("Match not found with ID: " + matchId));
         
-        if (completedMatch.getStatus() != MatchStatus.COMPLETED) {
+        if (completedMatch.getStatus() != MatchStatus.COMPLETED
+                && completedMatch.getStatus() != MatchStatus.WALKOVER) {
             throw new IllegalStateException("Match must be completed before advancing winner");
         }
         
@@ -337,7 +339,22 @@ public class BracketService {
         }
         
         Division division = completedMatch.getDivision();
-        
+
+        // Round robin has no bracket progression - every match is already
+        // scheduled upfront in a single round ("all fight all"), so there's no
+        // "next round" to advance a winner into. The division is complete once
+        // every one of its matches has a decided winner.
+        if (division.getBracketType() == BracketType.ROUND_ROBIN) {
+            List<Match> allMatches = matchRepository.findByDivisionIdAndRoundNumber(division.getId(), 1);
+            boolean allDecided = allMatches.stream().allMatch(m -> m.getWinner() != null);
+            if (allDecided) {
+                division.setCompleted(true);
+                divisionRepository.save(division);
+                log.info("All round-robin matches decided - division {} marked completed", division.getId());
+            }
+            return;
+        }
+
         // Find next round match where this winner should compete
         int nextRound = completedMatch.getRoundNumber() + 1;
         int nextMatchPosition = (completedMatch.getMatchPosition() + 1) / 2;
