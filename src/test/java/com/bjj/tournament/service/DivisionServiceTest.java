@@ -282,19 +282,22 @@ class DivisionServiceTest {
         verify(divisionRepository, times(1)).delete(division);
     }
 
-    @Test
-    void testDeleteDivision_AfterMatchesGenerated_ShouldThrowException() {
-        // Given
-        division.setMatchesGenerated(true);
-        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
-
-        // When/Then
-        assertThatThrownBy(() -> divisionService.deleteDivision(1L))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Cannot delete division after matches have been generated");
-
-        verify(divisionRepository, never()).delete(any(Division.class));
-    }
+    // Disabled alongside the matchesGenerated check in DivisionService.deleteDivision
+    // (see comment there) - deleting a division after match generation is now allowed,
+    // with frontend confirmation. Re-enable if that check is restored:
+    // @Test
+    // void testDeleteDivision_AfterMatchesGenerated_ShouldThrowException() {
+    //     // Given
+    //     division.setMatchesGenerated(true);
+    //     when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+    //
+    //     // When/Then
+    //     assertThatThrownBy(() -> divisionService.deleteDivision(1L))
+    //         .isInstanceOf(IllegalStateException.class)
+    //         .hasMessageContaining("Cannot delete division after matches have been generated");
+    //
+    //     verify(divisionRepository, never()).delete(any(Division.class));
+    // }
 
     // ============ ENROLL ATHLETE TESTS ============
 

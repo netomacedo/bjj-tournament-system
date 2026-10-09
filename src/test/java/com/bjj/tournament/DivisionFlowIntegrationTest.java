@@ -266,18 +266,21 @@ class DivisionFlowIntegrationTest {
         assertThat(divisionRepository.findById(division.getId())).isEmpty();
     }
 
-    @Test
-    void testDivisionDeletion_BlockedAfterMatchGeneration() throws Exception {
-        // Given - Division with matches generated
-        Division division = createDivisionWithAthletes(0);
-        division.setMatchesGenerated(true);
-        division = divisionRepository.save(division);
-
-        // When - Try to delete
-        // Then - Should fail
-        mockMvc.perform(delete("/api/divisions/" + division.getId()))
-            .andExpect(status().isBadRequest());
-    }
+    // Disabled alongside the matchesGenerated check in DivisionService.deleteDivision
+    // (see comment there) - deleting a division after match generation is now allowed,
+    // with frontend confirmation. Re-enable if that check is restored:
+    // @Test
+    // void testDivisionDeletion_BlockedAfterMatchGeneration() throws Exception {
+    //     // Given - Division with matches generated
+    //     Division division = createDivisionWithAthletes(0);
+    //     division.setMatchesGenerated(true);
+    //     division = divisionRepository.save(division);
+    //
+    //     // When - Try to delete
+    //     // Then - Should fail
+    //     mockMvc.perform(delete("/api/divisions/" + division.getId()))
+    //         .andExpect(status().isBadRequest());
+    // }
 
     @Test
     void testGetDivisionsByTournament_ReturnsAllDivisions() throws Exception {

@@ -160,11 +160,24 @@ public class DivisionService {
         log.info("Matches generated: {}", division.getMatchesGenerated());
         log.info("Athletes enrolled: {}", division.getAthletes().size());
 
-        // Cannot delete if matches have been generated
-        if (division.getMatchesGenerated()) {
-            log.error("Cannot delete - matches already generated!");
-            throw new IllegalStateException("Cannot delete division after matches have been generated");
-        }
+        // Deletion after match generation is now allowed (with frontend confirmation) -
+        // re-enable if that needs blocking again:
+        // if (division.getMatchesGenerated()) {
+        //     log.error("Cannot delete - matches already generated!");
+        //     throw new IllegalStateException("Cannot delete division after matches have been generated");
+        // }
+
+        // Division is deleted via bulk JPQL below (bypasses @Version issues), which
+        // bypasses JPA cascade too - matches and athlete enrollments must be cleared
+        // explicitly first or the division delete would fail on foreign key constraints.
+        int matchesDeleted = entityManager.createQuery("DELETE FROM Match m WHERE m.division.id = :divisionId")
+            .setParameter("divisionId", divisionId)
+            .executeUpdate();
+        log.info("Deleted {} matches for division", matchesDeleted);
+
+        entityManager.createNativeQuery("DELETE FROM division_athletes WHERE division_id = :divisionId")
+            .setParameter("divisionId", divisionId)
+            .executeUpdate();
 
         // Delete division using JPQL (bypasses @Version issues)
         log.info("Deleting division...");
