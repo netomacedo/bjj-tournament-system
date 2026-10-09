@@ -115,11 +115,12 @@ public class DivisionService {
     }
 
     /**
-     * Update division (only bracket type and weight class can be updated)
+     * Update division
+     * All fields can be updated before matches are generated
      */
     @Transactional
     public DivisionResponseDTO updateDivision(Long divisionId, DivisionUpdateDTO updateDTO) {
-        log.info("Updating division ID: {}", divisionId);
+        log.info("Updating division ID: {} with data: {}", divisionId, updateDTO);
 
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
@@ -129,17 +130,29 @@ public class DivisionService {
             throw new IllegalStateException("Cannot update division after matches have been generated");
         }
 
-        // Update allowed fields
-        if (updateDTO.getBracketType() != null) {
-            division.setBracketType(updateDTO.getBracketType());
+        // Update all fields
+        if (updateDTO.getBeltRank() != null) {
+            division.setBeltRank(updateDTO.getBeltRank());
+        }
+
+        if (updateDTO.getAgeCategory() != null) {
+            division.setAgeCategory(updateDTO.getAgeCategory());
+        }
+
+        if (updateDTO.getGender() != null) {
+            division.setGender(updateDTO.getGender());
         }
 
         if (updateDTO.getWeightClass() != null) {
             division.setWeightClass(updateDTO.getWeightClass());
         }
 
+        if (updateDTO.getBracketType() != null) {
+            division.setBracketType(updateDTO.getBracketType());
+        }
+
         Division updatedDivision = divisionRepository.save(division);
-        log.info("Successfully updated division ID: {}", divisionId);
+        log.info("Successfully updated division ID: {} - {}", divisionId, updatedDivision.getName());
 
         return convertToResponseDTO(updatedDivision);
     }
