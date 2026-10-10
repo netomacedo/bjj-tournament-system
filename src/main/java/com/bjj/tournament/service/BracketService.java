@@ -3,10 +3,12 @@ package com.bjj.tournament.service;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.entity.Division;
 import com.bjj.tournament.entity.Match;
+import com.bjj.tournament.entity.Tournament;
 import com.bjj.tournament.enums.BracketType;
 import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
+import com.bjj.tournament.repository.TournamentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ public class BracketService {
     
     private final DivisionRepository divisionRepository;
     private final MatchRepository matchRepository;
+    private final TournamentRepository tournamentRepository;
     
     /**
      * Generate matches automatically for a division
@@ -351,6 +354,7 @@ public class BracketService {
                 division.setCompleted(true);
                 divisionRepository.save(division);
                 log.info("All round-robin matches decided - division {} marked completed", division.getId());
+                checkAndCompleteTournament(division);
             }
             return;
         }
@@ -368,6 +372,7 @@ public class BracketService {
             // Mark division as completed
             division.setCompleted(true);
             divisionRepository.save(division);
+            checkAndCompleteTournament(division);
             return;
         }
         
@@ -389,6 +394,27 @@ public class BracketService {
 
             matchRepository.save(nextMatch);
             log.info("Winner advanced to next round match ID: {}", nextMatch.getId());
+        }
+    }
+
+    /**
+     * Marks the division's tournament as completed once every division in it
+     * has finished (a tournament with no divisions yet is never auto-completed).
+     */
+    private void checkAndCompleteTournament(Division division) {
+        Tournament tournament = division.getTournament();
+        if (tournament == null || Boolean.TRUE.equals(tournament.getCompleted())) {
+            return;
+        }
+
+        List<Division> divisions = divisionRepository.findByTournamentIdOrderByIdAsc(tournament.getId());
+        boolean allDivisionsCompleted = !divisions.isEmpty()
+            && divisions.stream().allMatch(d -> Boolean.TRUE.equals(d.getCompleted()));
+
+        if (allDivisionsCompleted) {
+            tournament.setCompleted(true);
+            tournamentRepository.save(tournament);
+            log.info("All divisions completed - tournament {} marked completed", tournament.getId());
         }
     }
 

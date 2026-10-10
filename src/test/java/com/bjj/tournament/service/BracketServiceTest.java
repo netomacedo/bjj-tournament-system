@@ -3,11 +3,13 @@ package com.bjj.tournament.service;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.entity.Division;
 import com.bjj.tournament.entity.Match;
+import com.bjj.tournament.entity.Tournament;
 import com.bjj.tournament.enums.AgeCategory;
 import com.bjj.tournament.enums.BracketType;
 import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
+import com.bjj.tournament.repository.TournamentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +36,9 @@ class BracketServiceTest {
 
     @Mock
     private MatchRepository matchRepository;
+
+    @Mock
+    private TournamentRepository tournamentRepository;
 
     @InjectMocks
     private BracketService bracketService;
@@ -213,5 +218,76 @@ class BracketServiceTest {
         bracketService.advanceWinnerToNextRound(22L, a.getId());
 
         assertThat(division.getCompleted()).isTrue();
+    }
+
+    @Test
+    void advanceWinnerToNextRound_DoesNotCompleteTournament_WhileOtherDivisionsPending() {
+        Tournament tournament = new Tournament();
+        tournament.setId(100L);
+        tournament.setCompleted(false);
+        division.setTournament(tournament);
+
+        Division otherDivision = new Division();
+        otherDivision.setId(2L);
+        otherDivision.setCompleted(false);
+
+        Athlete a = athletes.get(0);
+        Athlete b = athletes.get(1);
+
+        Match lastMatch = new Match();
+        lastMatch.setId(30L);
+        lastMatch.setDivision(division);
+        lastMatch.setAthlete1(a);
+        lastMatch.setAthlete2(b);
+        lastMatch.setWinner(a);
+        lastMatch.setStatus(MatchStatus.COMPLETED);
+        lastMatch.setRoundNumber(1);
+        lastMatch.setMatchPosition(1);
+
+        when(matchRepository.findById(30L)).thenReturn(Optional.of(lastMatch));
+        when(matchRepository.findByDivisionIdAndRoundNumber(1L, 1)).thenReturn(List.of(lastMatch));
+        when(divisionRepository.save(any(Division.class))).thenReturn(division);
+        when(divisionRepository.findByTournamentIdOrderByIdAsc(100L)).thenReturn(List.of(division, otherDivision));
+
+        bracketService.advanceWinnerToNextRound(30L, a.getId());
+
+        assertThat(division.getCompleted()).isTrue();
+        assertThat(tournament.getCompleted()).isFalse();
+    }
+
+    @Test
+    void advanceWinnerToNextRound_CompletesTournament_WhenEveryDivisionIsDone() {
+        Tournament tournament = new Tournament();
+        tournament.setId(101L);
+        tournament.setCompleted(false);
+        division.setTournament(tournament);
+
+        Division otherDivision = new Division();
+        otherDivision.setId(3L);
+        otherDivision.setCompleted(true); // already finished
+
+        Athlete a = athletes.get(0);
+        Athlete b = athletes.get(1);
+
+        Match lastMatch = new Match();
+        lastMatch.setId(31L);
+        lastMatch.setDivision(division);
+        lastMatch.setAthlete1(a);
+        lastMatch.setAthlete2(b);
+        lastMatch.setWinner(a);
+        lastMatch.setStatus(MatchStatus.COMPLETED);
+        lastMatch.setRoundNumber(1);
+        lastMatch.setMatchPosition(1);
+
+        when(matchRepository.findById(31L)).thenReturn(Optional.of(lastMatch));
+        when(matchRepository.findByDivisionIdAndRoundNumber(1L, 1)).thenReturn(List.of(lastMatch));
+        when(divisionRepository.save(any(Division.class))).thenReturn(division);
+        when(divisionRepository.findByTournamentIdOrderByIdAsc(101L)).thenReturn(List.of(division, otherDivision));
+        when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
+
+        bracketService.advanceWinnerToNextRound(31L, a.getId());
+
+        assertThat(division.getCompleted()).isTrue();
+        assertThat(tournament.getCompleted()).isTrue();
     }
 }
