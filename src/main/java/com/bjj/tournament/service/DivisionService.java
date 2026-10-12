@@ -286,7 +286,7 @@ public class DivisionService {
     }
 
     /**
-     * Get divisions ready for match generation (2+ athletes, no matches generated yet)
+     * Get divisions ready for match generation (1+ athletes, no matches generated yet)
      */
     @Transactional(readOnly = true)
     public List<DivisionResponseDTO> getDivisionsReadyForMatchGeneration() {
@@ -384,8 +384,10 @@ public class DivisionService {
                     createAthleteRanking(match.getAthlete2()));
             }
 
-            // Track wins/losses and points only for completed matches
-            if (match.getWinner() != null) {
+            // Track wins/losses and points only for completed matches with a real
+            // opponent - a bye/walkover match has athlete2 == null (no opponent),
+            // so there's no actual win/loss to tally and no loser to credit.
+            if (match.getWinner() != null && match.getAthlete1() != null && match.getAthlete2() != null) {
                 Long winnerId = match.getWinner().getId();
                 Long loserId = match.getAthlete1().getId().equals(winnerId) ?
                     match.getAthlete2().getId() : match.getAthlete1().getId();
@@ -490,19 +492,28 @@ public class DivisionService {
                 goldWinner.setMedal("GOLD");
             }
 
-            // 2nd place: Finals loser (SILVER)
-            Long silverWinnerId = finals.getAthlete1().getId().equals(goldWinnerId) ?
-                finals.getAthlete2().getId() : finals.getAthlete1().getId();
-            AthleteRankingDTO silverWinner = athleteStats.get(silverWinnerId);
-            if (silverWinner != null) {
-                silverWinner.setPosition(2);
-                silverWinner.setMedal("SILVER");
+            // 2nd place: Finals loser (SILVER) - guard against the finals match
+            // itself somehow lacking a real opponent (shouldn't normally happen,
+            // but avoids an NPE rather than assuming it never will)
+            if (finals.getAthlete1() != null && finals.getAthlete2() != null) {
+                Long silverWinnerId = finals.getAthlete1().getId().equals(goldWinnerId) ?
+                    finals.getAthlete2().getId() : finals.getAthlete1().getId();
+                AthleteRankingDTO silverWinner = athleteStats.get(silverWinnerId);
+                if (silverWinner != null) {
+                    silverWinner.setPosition(2);
+                    silverWinner.setMedal("SILVER");
+                }
             }
 
             // 3rd place: Semi-finals losers (BRONZE)
-            // Semi-finals are one round before finals
+            // Semi-finals are one round before finals. A bye/walkover match
+            // (athlete2 == null) has no real opponent and therefore no loser to
+            // award bronze to, so it's excluded here rather than treated as a
+            // semifinal - e.g. with 3 athletes, the bye recipient advances
+            // straight to the final and isn't part of the bronze calculation.
             List<Match> semifinals = matches.stream()
-                .filter(m -> m.getRoundNumber() == finalsRound - 1 && m.getWinner() != null)
+                .filter(m -> m.getRoundNumber() == finalsRound - 1 && m.getWinner() != null
+                    && m.getAthlete1() != null && m.getAthlete2() != null)
                 .collect(Collectors.toList());
 
             int bronzeCount = 0;

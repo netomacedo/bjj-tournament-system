@@ -184,12 +184,36 @@ class DivisionRepositoryTest {
     }
 
     @Test
-    void testFindDivisionsReadyForMatchGeneration_ShouldExcludeDivisionsWithLessThanTwoAthletes() {
+    void testFindDivisionsReadyForMatchGeneration_ShouldExcludeDivisionsWithNoAthletes() {
         // When
         List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration();
 
         // Then
         assertThat(readyDivisions).doesNotContain(division2); // division2 has 0 athletes
+    }
+
+    @Test
+    void testFindDivisionsReadyForMatchGeneration_ShouldIncludeDivisionsWithExactlyOneAthlete() {
+        // Given - IBJJF rule: a single enrolled athlete is still "ready" (they
+        // get gold automatically, no opponent needed)
+        Division soloDivision = new Division();
+        soloDivision.setTournament(tournament);
+        soloDivision.setBeltRank(BeltRank.BROWN);
+        soloDivision.setAgeCategory(AgeCategory.ADULT);
+        soloDivision.setGender(Gender.MALE);
+        soloDivision.setWeightClass(WeightClass.ADULT_MALE_LIGHT);
+        soloDivision.setBracketType(BracketType.SINGLE_ELIMINATION);
+        soloDivision.setMatchesGenerated(false);
+        soloDivision.setCompleted(false);
+        soloDivision.getAthletes().add(athlete1);
+        entityManager.persist(soloDivision);
+        entityManager.flush();
+
+        // When
+        List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration();
+
+        // Then
+        assertThat(readyDivisions).contains(soloDivision);
     }
 
     @Test

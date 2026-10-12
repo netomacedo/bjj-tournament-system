@@ -48,30 +48,49 @@ public class BracketService {
         }
         
         List<Athlete> athletes = division.getAthletes();
-        
-        if (athletes.size() < 2) {
-            throw new IllegalArgumentException("Need at least 2 athletes to generate matches");
+        int numAthletes = athletes.size();
+
+        if (numAthletes < 1) {
+            throw new IllegalArgumentException("Need at least 1 athlete to generate matches");
         }
-        
-        log.info("Division has {} athletes", athletes.size());
-        
+
+        log.info("Division has {} athletes", numAthletes);
+
         // Shuffle athletes for random seeding (in real scenario, you might seed by ranking)
         List<Athlete> shuffledAthletes = new ArrayList<>(athletes);
         Collections.shuffle(shuffledAthletes);
-        
-        List<Match> matches = new ArrayList<>();
-        
-        // Generate matches based on bracket type
-        switch (division.getBracketType()) {
-            case SINGLE_ELIMINATION:
-                matches = generateSingleEliminationBracket(division, shuffledAthletes);
-                break;
-            case DOUBLE_ELIMINATION:
-                matches = generateDoubleEliminationBracket(division, shuffledAthletes);
-                break;
-            case ROUND_ROBIN:
-                matches = generateRoundRobinBracket(division, shuffledAthletes);
-                break;
+
+        List<Match> matches;
+
+        if (numAthletes == 1) {
+            // IBJJF rule: a division with a single enrolled athlete is awarded
+            // gold automatically - there's nobody left to fight.
+            matches = generateSoloWalkoverBracket(division, shuffledAthletes.get(0));
+        } else if (numAthletes == 3 && division.getBracketType() != BracketType.ROUND_ROBIN) {
+            // IBJJF rule: divisions of exactly 3 athletes are run round-robin
+            // (everyone fights twice), not single elimination with a bye
+            // straight to the final. Override whatever bracket type was
+            // selected so the ranking/advancement logic - which branches on
+            // division.getBracketType() - treats these matches consistently
+            // with how they're actually shaped.
+            log.info("Division {} has exactly 3 athletes - using round-robin format per IBJJF rules instead of {}",
+                division.getId(), division.getBracketType());
+            division.setBracketType(BracketType.ROUND_ROBIN);
+            matches = generateRoundRobinBracket(division, shuffledAthletes);
+        } else {
+            switch (division.getBracketType()) {
+                case SINGLE_ELIMINATION:
+                    matches = generateSingleEliminationBracket(division, shuffledAthletes);
+                    break;
+                case DOUBLE_ELIMINATION:
+                    matches = generateDoubleEliminationBracket(division, shuffledAthletes);
+                    break;
+                case ROUND_ROBIN:
+                    matches = generateRoundRobinBracket(division, shuffledAthletes);
+                    break;
+                default:
+                    matches = new ArrayList<>();
+            }
         }
 
         // Save all matches
@@ -165,31 +184,46 @@ public class BracketService {
      */
     private List<Match> generateSingleEliminationBracket(Division division, List<Athlete> athletes) {
         List<Match> matches = new ArrayList<>();
-        
-        // Calculate number of matches needed for first round. Round up (not
-        // down) so an odd athlete out still gets their own bye/walkover match
-        // instead of being silently dropped from the bracket entirely - this
-        // must match the round-up used for currentRoundSize below, since both
-        // describe the same "how many round-1 slots are there" concept.
+
         int numAthletes = athletes.size();
-        int numFirstRoundMatches = (numAthletes + 1) / 2;
-        
-        // Create first round matches
+
+        // Size the bracket to the next power of two so byes are only ever
+        // needed in round 1, and every later round then has a clean
+        // power-of-two entrant count and never needs a bye of its own.
+        // Without this, an odd number of winners advancing into ANY later
+        // round (not just round 1) would leave one match there permanently
+        // missing an opponent, with nothing able to resolve it - e.g. 5
+        // athletes feeds an odd 3 winners into round 2, and 10 athletes
+        // feeds an odd 5 winners into round 2 despite 10 itself being even.
+        int bracketSize = 1;
+        while (bracketSize < numAthletes) {
+            bracketSize *= 2;
+        }
+        int numByes = bracketSize - numAthletes;
+        int numFirstRoundMatches = bracketSize / 2;
+
+        // Create first round matches. The first `numByes` slots are byes
+        // (one athlete, auto-advances); the rest pair up the remaining
+        // athletes normally. Athletes are pre-shuffled by the caller, so
+        // handing byes to the first `numByes` of that shuffled order is
+        // equivalent to picking bye recipients at random - there's no
+        // skill-based seeding in this app to preserve otherwise.
         int matchPosition = 1;
-        for (int i = 0; i < numFirstRoundMatches * 2; i += 2) {
+        for (int i = 0; i < numFirstRoundMatches; i++) {
             Match match = new Match();
             match.setDivision(division);
-            match.setAthlete1(athletes.get(i));
-            
-            // Handle odd number of athletes (one gets a bye)
-            if (i + 1 < athletes.size()) {
-                match.setAthlete2(athletes.get(i + 1));
-            } else {
-                // Bye - athlete1 automatically advances
+
+            if (i < numByes) {
+                Athlete byeAthlete = athletes.get(i);
+                match.setAthlete1(byeAthlete);
                 match.setStatus(MatchStatus.WALKOVER);
-                match.setWinner(athletes.get(i));
+                match.setWinner(byeAthlete);
+            } else {
+                int athleteIndex = numByes + (i - numByes) * 2;
+                match.setAthlete1(athletes.get(athleteIndex));
+                match.setAthlete2(athletes.get(athleteIndex + 1));
             }
-            
+
             match.setRoundNumber(1);
             match.setMatchPosition(matchPosition++);
             match.setStatus(match.getStatus() == null ? MatchStatus.PENDING : match.getStatus());
@@ -197,16 +231,17 @@ public class BracketService {
 
             matches.add(match);
         }
-        
-        // Create placeholder matches for subsequent rounds
-        // These will be filled as winners are determined
-        int currentRoundSize = (numAthletes + 1) / 2; // Round up for byes
+
+        // Create placeholder matches for subsequent rounds. currentRoundSize
+        // is always a power of two here (bracketSize/2, then halving each
+        // round), so no round beyond round 1 ever needs its own bye.
+        int currentRoundSize = numFirstRoundMatches;
         int roundNumber = 2;
         matchPosition = 1;
-        
+
         while (currentRoundSize > 1) {
-            int nextRoundSize = (currentRoundSize + 1) / 2;
-            
+            int nextRoundSize = currentRoundSize / 2;
+
             for (int i = 0; i < nextRoundSize; i++) {
                 Match match = new Match();
                 match.setDivision(division);
@@ -227,6 +262,26 @@ public class BracketService {
         return matches;
     }
     
+    /**
+     * Generate a single-match "bracket" for a division with exactly one
+     * enrolled athlete. Per IBJJF rules, a lone entrant is awarded gold
+     * automatically - this is represented as a walkover with no opponent,
+     * the same shape used for byes, so the existing ranking/advancement
+     * logic (which already knows how to handle an opponent-less match)
+     * assigns the medal with no special-casing needed downstream.
+     */
+    private List<Match> generateSoloWalkoverBracket(Division division, Athlete soleAthlete) {
+        Match match = new Match();
+        match.setDivision(division);
+        match.setAthlete1(soleAthlete);
+        match.setRoundNumber(1);
+        match.setMatchPosition(1);
+        match.setStatus(MatchStatus.WALKOVER);
+        match.setWinner(soleAthlete);
+        match.setDurationSeconds(getMatchDurationSeconds(division));
+        return new ArrayList<>(List.of(match));
+    }
+
     /**
      * Generate double elimination bracket
      * Losers get a second chance in the losers bracket

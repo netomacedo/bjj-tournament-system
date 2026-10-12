@@ -119,19 +119,66 @@ class BracketServiceTest {
     }
 
     @Test
-    void generateMatchesAutomatically_SingleElimination_WithThreeAthletes_GivesTheOddOneOutAByeAndAdvancesThem() {
-        // With 3 athletes, numFirstRoundMatches used to be computed with floor
-        // division (3/2=1), so only 2 of the 3 athletes were ever added to a
-        // match - the third was silently dropped from the bracket entirely,
-        // with no bye/walkover match and no path into round 2 at all.
+    void generateMatchesAutomatically_WithThreeAthletesAndSingleEliminationSelected_SwitchesToRoundRobinPerIbjjfRules() {
+        // IBJJF rule: exactly 3 athletes is run round-robin (everyone fights
+        // twice), not single elimination with a bye straight to the final.
+        // Even though the division was created with SINGLE_ELIMINATION
+        // selected, generation should override it to ROUND_ROBIN so the
+        // persisted bracket type matches how the matches are actually shaped.
         division.setBracketType(BracketType.SINGLE_ELIMINATION);
         List<Athlete> three = athletes.subList(0, 3);
         division.setAthletes(three);
 
-        // Simulate real persistence: assign IDs on save, and make subsequent
-        // lookups (findById, findByDivisionIdAndRoundNumber) read from what's
-        // actually been "saved" so far, since advanceWinnerToNextRound needs
-        // to find the round-2 placeholder match that was just created.
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+        when(matchRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<Match> matches = bracketService.generateMatchesAutomatically(1L);
+
+        assertThat(division.getBracketType()).as("bracket type overridden to round robin")
+            .isEqualTo(BracketType.ROUND_ROBIN);
+
+        // Round robin for 3 athletes = 3 matches (every unique pair once), no byes
+        assertThat(matches).hasSize(3);
+        assertThat(matches).as("nobody gets a bye - every match has two real athletes")
+            .allMatch(m -> m.getAthlete1() != null && m.getAthlete2() != null
+                && m.getStatus() != MatchStatus.WALKOVER);
+
+        List<String> pairs = matches.stream()
+            .map(m -> {
+                long a = m.getAthlete1().getId();
+                long b = m.getAthlete2().getId();
+                return Math.min(a, b) + "-" + Math.max(a, b);
+            })
+            .toList();
+        assertThat(pairs).containsExactlyInAnyOrder("1-2", "1-3", "2-3");
+    }
+
+    @Test
+    void generateMatchesAutomatically_WithThreeAthletesAndRoundRobinAlreadySelected_LeavesBracketTypeUnchanged() {
+        // No-op guard: when round robin was already explicitly selected for a
+        // 3-athlete division, generation shouldn't log/override anything - it
+        // should just behave like any other round-robin division.
+        List<Athlete> three = athletes.subList(0, 3);
+        division.setAthletes(three);
+        division.setBracketType(BracketType.ROUND_ROBIN);
+
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+        when(matchRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<Match> matches = bracketService.generateMatchesAutomatically(1L);
+
+        assertThat(division.getBracketType()).isEqualTo(BracketType.ROUND_ROBIN);
+        assertThat(matches).hasSize(3);
+    }
+
+    @Test
+    void generateMatchesAutomatically_WithOneAthlete_AwardsGoldAutomaticallyWithNoOpponent() {
+        // IBJJF rule: a division with a single enrolled athlete gets gold
+        // automatically - there's nobody left to fight.
+        Athlete soleAthlete = athletes.get(0);
+        division.setBracketType(BracketType.SINGLE_ELIMINATION);
+        division.setAthletes(List.of(soleAthlete));
+
         List<Match> persisted = new ArrayList<>();
         AtomicLong idSequence = new AtomicLong(1);
 
@@ -146,47 +193,23 @@ class BracketServiceTest {
             persisted.addAll(toSave);
             return toSave;
         });
-        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(matchRepository.findById(any())).thenAnswer(invocation -> {
             Long id = invocation.getArgument(0);
             return persisted.stream().filter(m -> Objects.equals(m.getId(), id)).findFirst();
         });
-        when(matchRepository.findByDivisionIdAndRoundNumber(eq(1L), anyInt())).thenAnswer(invocation -> {
-            int round = invocation.getArgument(1);
-            return persisted.stream()
-                .filter(m -> m.getRoundNumber() == round)
-                .collect(Collectors.toList());
-        });
+        when(matchRepository.findByDivisionIdAndRoundNumber(1L, 2)).thenReturn(List.of());
+        when(divisionRepository.save(any(Division.class))).thenReturn(division);
 
         List<Match> matches = bracketService.generateMatchesAutomatically(1L);
 
-        // Every athlete appears somewhere in round 1 - nobody silently dropped
-        List<Match> round1 = matches.stream().filter(m -> m.getRoundNumber() == 1).toList();
-        List<Long> round1AthleteIds = round1.stream()
-            .flatMap(m -> java.util.stream.Stream.of(m.getAthlete1(), m.getAthlete2()))
-            .filter(Objects::nonNull)
-            .map(Athlete::getId)
-            .toList();
-        assertThat(round1AthleteIds).containsExactlyInAnyOrderElementsOf(
-            three.stream().map(Athlete::getId).toList());
-
-        // The bye match exists and is already decided
-        Match byeMatch = round1.stream()
-            .filter(m -> m.getStatus() == MatchStatus.WALKOVER)
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("Expected a walkover bye match in round 1"));
-        Athlete byeWinner = byeMatch.getWinner();
-        assertThat(byeWinner).isNotNull();
-
-        // And that bye winner was auto-advanced into the round-2 final,
-        // instead of being left unplaced until manually completed
-        Match finalMatch = matches.stream()
-            .filter(m -> m.getRoundNumber() == 2)
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("Expected a round 2 final match"));
-        assertThat(java.util.Arrays.asList(finalMatch.getAthlete1(), finalMatch.getAthlete2()))
-            .extracting(a -> a == null ? null : a.getId())
-            .contains(byeWinner.getId());
+        assertThat(matches).hasSize(1);
+        Match soloMatch = matches.get(0);
+        assertThat(soloMatch.getAthlete1().getId()).isEqualTo(soleAthlete.getId());
+        assertThat(soloMatch.getAthlete2()).isNull();
+        assertThat(soloMatch.getStatus()).isEqualTo(MatchStatus.WALKOVER);
+        assertThat(soloMatch.getWinner().getId()).isEqualTo(soleAthlete.getId());
+        assertThat(division.getCompleted()).as("division completes immediately - no fight to wait for").isTrue();
+        assertThat(division.getMatchesGenerated()).isTrue();
     }
 
     @Test
@@ -365,5 +388,128 @@ class BracketServiceTest {
 
         assertThat(division.getCompleted()).isTrue();
         assertThat(tournament.getCompleted()).isTrue();
+    }
+
+    // ---- Single elimination: full bracket simulation for various athlete counts ----
+    //
+    // These don't just check round 1 - they actually play the entire bracket
+    // out round by round (picking athlete1 as the winner of every match) and
+    // confirm every match eventually gets decided, with exactly one champion
+    // at the end. This is what actually proves byes propagate correctly
+    // through every round, not just round 1 - the bug this was built to catch
+    // only showed up a round or two in for 5 and 10 athletes, not round 1.
+
+    // Note: 3 athletes is deliberately not covered here - generateMatchesAutomatically
+    // now intercepts exactly 3 athletes and always uses round-robin (IBJJF rule),
+    // so it never reaches generateSingleEliminationBracket's bye-to-final path.
+    // See generateMatchesAutomatically_WithThreeAthletesAndSingleEliminationSelected_SwitchesToRoundRobinPerIbjjfRules.
+
+    @Test
+    void singleElimination_WithFiveAthletes_ResolvesToOneChampionWithNoStuckMatches() {
+        assertBracketFullyResolves(5);
+    }
+
+    @Test
+    void singleElimination_WithTenAthletes_ResolvesToOneChampionWithNoStuckMatches() {
+        assertBracketFullyResolves(10);
+    }
+
+    /**
+     * Generates a single-elimination bracket for the given athlete count, then
+     * simulates playing every match (athlete1 always wins, for determinism)
+     * until no more matches can be completed. Asserts:
+     * - total generated matches = bracketSize - 1 (the standard single-elimination
+     *   invariant, where bracketSize is the next power of two >= athleteCount)
+     * - every athlete appears in round 1 exactly once (nobody dropped)
+     * - every single match ends up decided (WALKOVER or COMPLETED) - none left
+     *   stuck in PENDING with a permanently-missing opponent
+     * - exactly one champion emerges in the final round
+     */
+    private void assertBracketFullyResolves(int athleteCount) {
+        Division testDivision = new Division();
+        testDivision.setId(1L);
+        testDivision.setBracketType(BracketType.SINGLE_ELIMINATION);
+        testDivision.setAgeCategory(AgeCategory.ADULT);
+        testDivision.setMatchesGenerated(false);
+
+        List<Athlete> testAthletes = new ArrayList<>();
+        for (long i = 1; i <= athleteCount; i++) {
+            Athlete athlete = new Athlete();
+            athlete.setId(i);
+            athlete.setName("Athlete " + i);
+            testAthletes.add(athlete);
+        }
+        testDivision.setAthletes(testAthletes);
+
+        List<Match> persisted = new ArrayList<>();
+        AtomicLong idSequence = new AtomicLong(1);
+
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(testDivision));
+        when(matchRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Match> toSave = invocation.getArgument(0);
+            for (Match m : toSave) {
+                if (m.getId() == null) {
+                    m.setId(idSequence.getAndIncrement());
+                }
+            }
+            persisted.addAll(toSave);
+            return toSave;
+        });
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(matchRepository.findById(any())).thenAnswer(invocation -> {
+            Long id = invocation.getArgument(0);
+            return persisted.stream().filter(m -> Objects.equals(m.getId(), id)).findFirst();
+        });
+        when(matchRepository.findByDivisionIdAndRoundNumber(eq(1L), anyInt())).thenAnswer(invocation -> {
+            int round = invocation.getArgument(1);
+            return persisted.stream()
+                .filter(m -> m.getRoundNumber() == round)
+                .collect(Collectors.toList());
+        });
+
+        List<Match> matches = bracketService.generateMatchesAutomatically(1L);
+
+        int bracketSize = 1;
+        while (bracketSize < athleteCount) {
+            bracketSize *= 2;
+        }
+        assertThat(matches).as("total matches for %d athletes (bracket size %d)", athleteCount, bracketSize)
+            .hasSize(bracketSize - 1);
+
+        List<Match> round1 = matches.stream().filter(m -> m.getRoundNumber() == 1).toList();
+        List<Long> round1AthleteIds = round1.stream()
+            .flatMap(m -> java.util.stream.Stream.of(m.getAthlete1(), m.getAthlete2()))
+            .filter(Objects::nonNull)
+            .map(Athlete::getId)
+            .toList();
+        assertThat(round1AthleteIds).as("every athlete appears in round 1 exactly once")
+            .containsExactlyInAnyOrderElementsOf(testAthletes.stream().map(Athlete::getId).toList());
+
+        // Play out every remaining match until nothing more can be completed
+        boolean progressed = true;
+        int safetyIterations = 0;
+        while (progressed) {
+            progressed = false;
+            safetyIterations++;
+            assertThat(safetyIterations).as("safety limit - bracket should resolve quickly").isLessThan(50);
+
+            for (Match m : new ArrayList<>(persisted)) {
+                if (m.getStatus() == MatchStatus.PENDING && m.getAthlete1() != null && m.getAthlete2() != null) {
+                    Athlete winner = m.getAthlete1();
+                    m.setStatus(MatchStatus.COMPLETED);
+                    m.setWinner(winner);
+                    bracketService.advanceWinnerToNextRound(m.getId(), winner.getId());
+                    progressed = true;
+                }
+            }
+        }
+
+        assertThat(persisted).as("no match should be left stuck without a decided winner")
+            .allMatch(m -> m.getStatus() == MatchStatus.WALKOVER || m.getStatus() == MatchStatus.COMPLETED);
+
+        int finalRound = persisted.stream().mapToInt(Match::getRoundNumber).max().orElseThrow();
+        List<Match> finalMatches = persisted.stream().filter(m -> m.getRoundNumber() == finalRound).toList();
+        assertThat(finalMatches).as("exactly one final match").hasSize(1);
+        assertThat(finalMatches.get(0).getWinner()).as("a champion was decided").isNotNull();
     }
 }

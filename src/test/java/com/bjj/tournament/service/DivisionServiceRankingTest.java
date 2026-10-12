@@ -2,6 +2,7 @@ package com.bjj.tournament.service;
 
 import com.bjj.tournament.dto.AthleteRankingDTO;
 import com.bjj.tournament.entity.*;
+import com.bjj.tournament.enums.BracketType;
 import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.AthleteRepository;
 import com.bjj.tournament.repository.DivisionRepository;
@@ -116,6 +117,59 @@ class DivisionServiceRankingTest {
     }
 
     @Test
+    void getDivisionRankings_WithThreeAthleteBracketIncludingABye_DoesNotThrowAndAssignsCorrectMedals() {
+        // Given - 3-athlete single elimination: round 1 has one real match plus
+        // a bye (athlete3 advances automatically with no opponent, athlete2 ==
+        // null), and the final is the round-1 winner against the bye recipient.
+        // This previously threw an NPE because the bye match was incorrectly
+        // treated as a "semifinal" with a loser to award bronze to.
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+
+        List<Match> matches = new ArrayList<>();
+
+        // Round 1: Levy vs Neto (Levy wins)
+        matches.add(createMatch(1L, 1, athlete1, athlete2, athlete1, 6, 2));
+
+        // Round 1: bye - Athlete 3 advances automatically, no opponent
+        Match byeMatch = new Match();
+        byeMatch.setId(2L);
+        byeMatch.setRoundNumber(1);
+        byeMatch.setMatchPosition(2);
+        byeMatch.setDivision(division);
+        byeMatch.setAthlete1(athlete3);
+        byeMatch.setAthlete2(null);
+        byeMatch.setWinner(athlete3);
+        byeMatch.setStatus(MatchStatus.WALKOVER);
+        matches.add(byeMatch);
+
+        // Round 2 (final): Levy vs Athlete 3 (Athlete 3 wins)
+        matches.add(createMatch(3L, 2, athlete1, athlete3, athlete3, 4, 6));
+
+        when(matchRepository.findByDivisionIdOrderByRoundNumberAsc(1L)).thenReturn(matches);
+
+        // When
+        List<AthleteRankingDTO> rankings = divisionService.getDivisionRankings(1L);
+
+        // Then
+        assertNotNull(rankings);
+        assertEquals(3, rankings.size());
+
+        AthleteRankingDTO gold = rankings.stream().filter(r -> r.getPosition() == 1).findFirst().orElseThrow();
+        assertEquals("Athlete 3", gold.getAthleteName());
+        assertEquals("GOLD", gold.getMedal());
+
+        AthleteRankingDTO silver = rankings.stream().filter(r -> r.getPosition() == 2).findFirst().orElseThrow();
+        assertEquals("Levy", silver.getAthleteName());
+        assertEquals("SILVER", silver.getMedal());
+
+        // Neto lost the only real round-1 match, so gets bronze; the bye
+        // recipient never played a real semifinal, so isn't bronze-eligible
+        List<AthleteRankingDTO> bronzes = rankings.stream().filter(r -> r.getPosition() == 3).toList();
+        assertEquals(1, bronzes.size());
+        assertEquals("Neto", bronzes.get(0).getAthleteName());
+    }
+
+    @Test
     void getDivisionRankings_WithNoMatchesGenerated_ReturnsEmptyList() {
         // Given
         division.setMatchesGenerated(false);
@@ -178,6 +232,205 @@ class DivisionServiceRankingTest {
         assertTrue(levy.getTotalPoints() > 0);
     }
 
+    // ---- Round robin ranking tests ----
+
+    @Test
+    void getDivisionRankings_RoundRobin_AssignsGoldSilverAndTwoBronzes() {
+        // Given - 4 athletes, every pair plays once, clean win counts: 3/2/1/0
+        division.setBracketType(BracketType.ROUND_ROBIN);
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+
+        List<Match> matches = List.of(
+            createMatch(1L, 1, athlete1, athlete2, athlete1, 6, 2), // Levy beats Neto
+            createMatch(2L, 1, athlete1, athlete3, athlete1, 6, 0), // Levy beats Athlete3
+            createMatch(3L, 1, athlete1, athlete4, athlete1, 6, 0), // Levy beats Athlete4
+            createMatch(4L, 1, athlete2, athlete3, athlete2, 4, 2), // Neto beats Athlete3
+            createMatch(5L, 1, athlete2, athlete4, athlete2, 4, 0), // Neto beats Athlete4
+            createMatch(6L, 1, athlete3, athlete4, athlete3, 2, 0)  // Athlete3 beats Athlete4
+        );
+        when(matchRepository.findByDivisionIdOrderByRoundNumberAsc(1L)).thenReturn(matches);
+
+        // When
+        List<AthleteRankingDTO> rankings = divisionService.getDivisionRankings(1L);
+
+        // Then - top 2 by win count get gold/silver; round robin always awards
+        // bronze to BOTH the 3rd and 4th-ranked athletes, even though
+        // Athlete4 here has strictly fewer wins than Athlete3 (0 vs 1) - this
+        // is the intentional "two bronzes" rule, not a tie-break.
+        assertEquals(4, rankings.size());
+
+        assertEquals("Levy", rankings.stream().filter(r -> r.getPosition() == 1).findFirst().orElseThrow().getAthleteName());
+        assertEquals("GOLD", rankings.stream().filter(r -> r.getPosition() == 1).findFirst().orElseThrow().getMedal());
+
+        assertEquals("Neto", rankings.stream().filter(r -> r.getPosition() == 2).findFirst().orElseThrow().getAthleteName());
+        assertEquals("SILVER", rankings.stream().filter(r -> r.getPosition() == 2).findFirst().orElseThrow().getMedal());
+
+        List<AthleteRankingDTO> bronzes = rankings.stream().filter(r -> r.getPosition() == 3).toList();
+        assertEquals(2, bronzes.size());
+        assertTrue(bronzes.stream().allMatch(b -> "BRONZE".equals(b.getMedal())));
+        assertTrue(bronzes.stream().anyMatch(b -> "Athlete 3".equals(b.getAthleteName())));
+        assertTrue(bronzes.stream().anyMatch(b -> "Athlete 4".equals(b.getAthleteName())));
+    }
+
+    @Test
+    void getDivisionRankings_RoundRobin_TiebreaksBySubmissionWinsWhenWinsAreEqual() {
+        // Given - Levy and Neto both have 1 win each, but Levy's was by
+        // submission and Neto's was on points - Levy should rank higher.
+        division.setBracketType(BracketType.ROUND_ROBIN);
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+
+        List<Match> matches = List.of(
+            createMatchWithSubmission(1L, athlete1, athlete3, athlete1, 0, 0, true),  // Levy submits Athlete3
+            createMatch(2L, 1, athlete2, athlete4, athlete2, 4, 2)                     // Neto beats Athlete4 on points
+        );
+        when(matchRepository.findByDivisionIdOrderByRoundNumberAsc(1L)).thenReturn(matches);
+
+        // When
+        List<AthleteRankingDTO> rankings = divisionService.getDivisionRankings(1L);
+
+        // Then
+        AthleteRankingDTO levy = rankings.stream().filter(r -> "Levy".equals(r.getAthleteName())).findFirst().orElseThrow();
+        AthleteRankingDTO neto = rankings.stream().filter(r -> "Neto".equals(r.getAthleteName())).findFirst().orElseThrow();
+
+        assertEquals(1, levy.getWins());
+        assertEquals(1, neto.getWins());
+        assertEquals(1, levy.getSubmissionWins());
+        assertEquals(0, neto.getSubmissionWins());
+        assertTrue(levy.getPosition() < neto.getPosition(),
+            "Levy (submission win) should rank above Neto (points win) despite equal win counts");
+    }
+
+    @Test
+    void getDivisionRankings_RoundRobin_TiebreaksByPointsWhenWinsAndSubmissionsAreEqual() {
+        // Given - Levy and Neto both have 1 win each, no submissions either
+        // way, but Levy scored more points in their win - Levy ranks higher.
+        division.setBracketType(BracketType.ROUND_ROBIN);
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+
+        List<Match> matches = List.of(
+            createMatch(1L, 1, athlete1, athlete3, athlete1, 10, 0), // Levy wins big on points
+            createMatch(2L, 1, athlete2, athlete4, athlete2, 2, 0)   // Neto wins narrowly on points
+        );
+        when(matchRepository.findByDivisionIdOrderByRoundNumberAsc(1L)).thenReturn(matches);
+
+        // When
+        List<AthleteRankingDTO> rankings = divisionService.getDivisionRankings(1L);
+
+        // Then
+        AthleteRankingDTO levy = rankings.stream().filter(r -> "Levy".equals(r.getAthleteName())).findFirst().orElseThrow();
+        AthleteRankingDTO neto = rankings.stream().filter(r -> "Neto".equals(r.getAthleteName())).findFirst().orElseThrow();
+
+        assertEquals(levy.getWins(), neto.getWins());
+        assertEquals(levy.getSubmissionWins(), neto.getSubmissionWins());
+        assertTrue(levy.getTotalPoints() > neto.getTotalPoints());
+        assertTrue(levy.getPosition() < neto.getPosition(),
+            "Levy (more points) should rank above Neto despite equal wins and submissions");
+    }
+
+    @Test
+    void getDivisionRankings_RoundRobin_FifthPlaceIsPositionFourNotFive() {
+        // Given - 5 athletes with a clean win-count ladder: 4/3/2/1/0.
+        // Positions 3 and 4 (by sort order) both get bronze per the
+        // "two bronzes" rule, and the 5th-ranked athlete must land on
+        // position 4, not be skipped to position 5.
+        Athlete athlete5 = new Athlete();
+        athlete5.setId(5L);
+        athlete5.setName("Athlete 5");
+        athlete5.setTeam("Team E");
+
+        division.setBracketType(BracketType.ROUND_ROBIN);
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+
+        List<Match> matches = List.of(
+            createMatch(1L, 1, athlete1, athlete2, athlete1, 2, 0),
+            createMatch(2L, 1, athlete1, athlete3, athlete1, 2, 0),
+            createMatch(3L, 1, athlete1, athlete4, athlete1, 2, 0),
+            createMatch(4L, 1, athlete1, athlete5, athlete1, 2, 0),
+            createMatch(5L, 1, athlete2, athlete3, athlete2, 2, 0),
+            createMatch(6L, 1, athlete2, athlete4, athlete2, 2, 0),
+            createMatch(7L, 1, athlete2, athlete5, athlete2, 2, 0),
+            createMatch(8L, 1, athlete3, athlete4, athlete3, 2, 0),
+            createMatch(9L, 1, athlete3, athlete5, athlete3, 2, 0),
+            createMatch(10L, 1, athlete4, athlete5, athlete4, 2, 0)
+        );
+        when(matchRepository.findByDivisionIdOrderByRoundNumberAsc(1L)).thenReturn(matches);
+
+        // When
+        List<AthleteRankingDTO> rankings = divisionService.getDivisionRankings(1L);
+
+        // Then
+        assertEquals(5, rankings.size());
+        assertEquals(List.of(1, 2, 3, 3, 4), rankings.stream()
+            .sorted(Comparator.comparing(AthleteRankingDTO::getWins).reversed())
+            .map(AthleteRankingDTO::getPosition)
+            .toList());
+
+        AthleteRankingDTO lastPlace = rankings.stream()
+            .filter(r -> "Athlete 5".equals(r.getAthleteName()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(0, lastPlace.getWins());
+        assertEquals(4, lastPlace.getPosition(), "5th-ranked athlete should be position 4, not skipped to 5");
+    }
+
+    @Test
+    void getDivisionRankings_RoundRobin_WithThreeAthletes_AssignsSingleBronzeNotTwo() {
+        // Given - IBJJF 3-athlete division run as round-robin: with only 3
+        // competitors there's no 4th place to pair with 3rd, so the "two
+        // bronzes" rule should naturally yield just one bronze medal.
+        division.setBracketType(BracketType.ROUND_ROBIN);
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+
+        List<Match> matches = List.of(
+            createMatch(1L, 1, athlete1, athlete2, athlete1, 6, 2), // Levy beats Neto
+            createMatch(2L, 1, athlete1, athlete3, athlete1, 6, 0), // Levy beats Athlete3
+            createMatch(3L, 1, athlete2, athlete3, athlete2, 4, 2)  // Neto beats Athlete3
+        );
+        when(matchRepository.findByDivisionIdOrderByRoundNumberAsc(1L)).thenReturn(matches);
+
+        // When
+        List<AthleteRankingDTO> rankings = divisionService.getDivisionRankings(1L);
+
+        // Then
+        assertEquals(3, rankings.size());
+        assertEquals("GOLD", rankings.stream().filter(r -> r.getPosition() == 1).findFirst().orElseThrow().getMedal());
+        assertEquals("SILVER", rankings.stream().filter(r -> r.getPosition() == 2).findFirst().orElseThrow().getMedal());
+
+        List<AthleteRankingDTO> bronzes = rankings.stream().filter(r -> r.getPosition() == 3).toList();
+        assertEquals(1, bronzes.size(), "only one athlete left to take 3rd when there are just 3 competitors");
+        assertEquals("Athlete 3", bronzes.get(0).getAthleteName());
+    }
+
+    @Test
+    void getDivisionRankings_WithSoleAthlete_AssignsGoldOnlyWithNoSilverOrBronze() {
+        // Given - IBJJF rule: a division with a single enrolled athlete is
+        // awarded gold automatically via a walkover with no opponent.
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+
+        Match soloMatch = new Match();
+        soloMatch.setId(1L);
+        soloMatch.setRoundNumber(1);
+        soloMatch.setMatchPosition(1);
+        soloMatch.setDivision(division);
+        soloMatch.setAthlete1(athlete1);
+        soloMatch.setAthlete2(null);
+        soloMatch.setWinner(athlete1);
+        soloMatch.setStatus(MatchStatus.WALKOVER);
+
+        when(matchRepository.findByDivisionIdOrderByRoundNumberAsc(1L)).thenReturn(List.of(soloMatch));
+
+        // When
+        List<AthleteRankingDTO> rankings = divisionService.getDivisionRankings(1L);
+
+        // Then
+        assertEquals(1, rankings.size());
+        AthleteRankingDTO gold = rankings.get(0);
+        assertEquals("Levy", gold.getAthleteName());
+        assertEquals("GOLD", gold.getMedal());
+        assertEquals(1, gold.getPosition());
+        assertEquals(0, gold.getWins(), "a walkover isn't a real win to tally");
+    }
+
     // Helper method to create a completed bracket
     private List<Match> createCompletedBracket() {
         List<Match> matches = new ArrayList<>();
@@ -237,6 +490,14 @@ class DivisionServiceRankingTest {
         match.setAthlete1Points(a1Points);
         match.setAthlete2Points(a2Points);
         match.setStatus(MatchStatus.COMPLETED);
+        return match;
+    }
+
+    // Helper to create a completed match decided by submission
+    private Match createMatchWithSubmission(Long id, Athlete a1, Athlete a2,
+                            Athlete winner, int a1Points, int a2Points, boolean finishedBySubmission) {
+        Match match = createMatch(id, 1, a1, a2, winner, a1Points, a2Points);
+        match.setFinishedBySubmission(finishedBySubmission);
         return match;
     }
 }
