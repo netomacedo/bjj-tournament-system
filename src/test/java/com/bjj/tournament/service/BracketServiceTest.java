@@ -19,10 +19,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
@@ -111,6 +116,77 @@ class BracketServiceTest {
 
         assertThat(pairs).containsExactlyInAnyOrder("1-2", "1-3", "1-4", "2-3", "2-4", "3-4");
         assertThat(pairs).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void generateMatchesAutomatically_SingleElimination_WithThreeAthletes_GivesTheOddOneOutAByeAndAdvancesThem() {
+        // With 3 athletes, numFirstRoundMatches used to be computed with floor
+        // division (3/2=1), so only 2 of the 3 athletes were ever added to a
+        // match - the third was silently dropped from the bracket entirely,
+        // with no bye/walkover match and no path into round 2 at all.
+        division.setBracketType(BracketType.SINGLE_ELIMINATION);
+        List<Athlete> three = athletes.subList(0, 3);
+        division.setAthletes(three);
+
+        // Simulate real persistence: assign IDs on save, and make subsequent
+        // lookups (findById, findByDivisionIdAndRoundNumber) read from what's
+        // actually been "saved" so far, since advanceWinnerToNextRound needs
+        // to find the round-2 placeholder match that was just created.
+        List<Match> persisted = new ArrayList<>();
+        AtomicLong idSequence = new AtomicLong(1);
+
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+        when(matchRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Match> toSave = invocation.getArgument(0);
+            for (Match m : toSave) {
+                if (m.getId() == null) {
+                    m.setId(idSequence.getAndIncrement());
+                }
+            }
+            persisted.addAll(toSave);
+            return toSave;
+        });
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(matchRepository.findById(any())).thenAnswer(invocation -> {
+            Long id = invocation.getArgument(0);
+            return persisted.stream().filter(m -> Objects.equals(m.getId(), id)).findFirst();
+        });
+        when(matchRepository.findByDivisionIdAndRoundNumber(eq(1L), anyInt())).thenAnswer(invocation -> {
+            int round = invocation.getArgument(1);
+            return persisted.stream()
+                .filter(m -> m.getRoundNumber() == round)
+                .collect(Collectors.toList());
+        });
+
+        List<Match> matches = bracketService.generateMatchesAutomatically(1L);
+
+        // Every athlete appears somewhere in round 1 - nobody silently dropped
+        List<Match> round1 = matches.stream().filter(m -> m.getRoundNumber() == 1).toList();
+        List<Long> round1AthleteIds = round1.stream()
+            .flatMap(m -> java.util.stream.Stream.of(m.getAthlete1(), m.getAthlete2()))
+            .filter(Objects::nonNull)
+            .map(Athlete::getId)
+            .toList();
+        assertThat(round1AthleteIds).containsExactlyInAnyOrderElementsOf(
+            three.stream().map(Athlete::getId).toList());
+
+        // The bye match exists and is already decided
+        Match byeMatch = round1.stream()
+            .filter(m -> m.getStatus() == MatchStatus.WALKOVER)
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Expected a walkover bye match in round 1"));
+        Athlete byeWinner = byeMatch.getWinner();
+        assertThat(byeWinner).isNotNull();
+
+        // And that bye winner was auto-advanced into the round-2 final,
+        // instead of being left unplaced until manually completed
+        Match finalMatch = matches.stream()
+            .filter(m -> m.getRoundNumber() == 2)
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Expected a round 2 final match"));
+        assertThat(java.util.Arrays.asList(finalMatch.getAthlete1(), finalMatch.getAthlete2()))
+            .extracting(a -> a == null ? null : a.getId())
+            .contains(byeWinner.getId());
     }
 
     @Test

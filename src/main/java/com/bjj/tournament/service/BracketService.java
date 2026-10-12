@@ -73,10 +73,19 @@ public class BracketService {
                 matches = generateRoundRobinBracket(division, shuffledAthletes);
                 break;
         }
-        
+
         // Save all matches
         List<Match> savedMatches = matchRepository.saveAll(matches);
-        
+
+        // Immediately advance any bye winners (round-1 walkovers created above,
+        // for an odd number of athletes) into their next-round slot, instead of
+        // leaving them sitting unplaced until someone manually completes them.
+        for (Match match : savedMatches) {
+            if (match.getStatus() == MatchStatus.WALKOVER && match.getWinner() != null) {
+                advanceWinnerToNextRound(match.getId(), match.getWinner().getId());
+            }
+        }
+
         // Mark division as having matches generated
         division.setMatchesGenerated(true);
         divisionRepository.save(division);
@@ -157,9 +166,13 @@ public class BracketService {
     private List<Match> generateSingleEliminationBracket(Division division, List<Athlete> athletes) {
         List<Match> matches = new ArrayList<>();
         
-        // Calculate number of matches needed for first round
+        // Calculate number of matches needed for first round. Round up (not
+        // down) so an odd athlete out still gets their own bye/walkover match
+        // instead of being silently dropped from the bracket entirely - this
+        // must match the round-up used for currentRoundSize below, since both
+        // describe the same "how many round-1 slots are there" concept.
         int numAthletes = athletes.size();
-        int numFirstRoundMatches = numAthletes / 2;
+        int numFirstRoundMatches = (numAthletes + 1) / 2;
         
         // Create first round matches
         int matchPosition = 1;
