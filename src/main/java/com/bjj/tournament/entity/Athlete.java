@@ -143,9 +143,8 @@ public class Athlete {
      * Calculate age from date of birth (if provided) and set defaults
      */
     @PrePersist
-    @PreUpdate
     private void calculateAgeAndDefaults() {
-        // If dateOfBirth is provided, calculate age from it
+        // On creation: If dateOfBirth is provided, calculate age from it
         if (this.dateOfBirth != null) {
             this.age = Period.between(this.dateOfBirth, LocalDate.now()).getYears();
         }
@@ -157,6 +156,26 @@ public class Athlete {
         // Set gender to NOT_APPLICABLE for kids under 10 if not already set
         if (this.age != null && this.age < 10 && this.gender == null) {
             this.gender = Gender.NOT_APPLICABLE;
+        }
+
+        // Set default team and coach if not provided
+        if (this.team == null || this.team.trim().isEmpty()) {
+            this.team = "Takedown Martial Arts";
+        }
+        if (this.coachName == null || this.coachName.trim().isEmpty()) {
+            this.coachName = "Pedro Monteiro";
+        }
+    }
+
+    /**
+     * Update dateOfBirth when age changes
+     * On updates, age is the source of truth - recalculate dateOfBirth from age
+     */
+    @PreUpdate
+    private void updateDerivedFields() {
+        // On update: Age is the primary field, recalculate dateOfBirth from it
+        if (this.age != null) {
+            this.dateOfBirth = LocalDate.now().minusYears(this.age);
         }
 
         // Set default team and coach if not provided
