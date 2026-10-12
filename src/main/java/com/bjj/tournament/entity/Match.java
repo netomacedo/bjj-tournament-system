@@ -20,7 +20,10 @@ import java.time.LocalDateTime;
 @Table(name = "matches", indexes = {
     @Index(name = "idx_match_division", columnList = "division_id"),
     @Index(name = "idx_match_status", columnList = "status"),
-    @Index(name = "idx_match_round", columnList = "round_number")
+    @Index(name = "idx_match_round", columnList = "round_number"),
+    @Index(name = "idx_match_athlete1", columnList = "athlete1_id"),
+    @Index(name = "idx_match_athlete2", columnList = "athlete2_id"),
+    @Index(name = "idx_match_winner", columnList = "winner_id")
 })
 @Data
 @NoArgsConstructor

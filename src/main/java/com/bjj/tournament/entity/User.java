@@ -22,10 +22,11 @@ import java.util.List;
  * Implements UserDetails for Spring Security integration
  */
 @Entity
-@Table(name = "users", indexes = {
-    @Index(name = "idx_user_username", columnList = "username", unique = true),
-    @Index(name = "idx_user_email", columnList = "email", unique = true)
-})
+@Table(name = "users")
+// No explicit @Index here: username and email already use @Column(unique = true)
+// below, which Hibernate backs with its own unique constraint + index. An
+// earlier explicit @Index(unique = true) on the same columns created a
+// second, fully redundant unique index per column - removed to avoid that.
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
