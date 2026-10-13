@@ -79,6 +79,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Flyway for versioned DB migrations (replaces ddl-auto=update) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
         <!-- Lombok to reduce boilerplate code -->
         <dependency>
             <groupId>org.projectlombok</groupId>

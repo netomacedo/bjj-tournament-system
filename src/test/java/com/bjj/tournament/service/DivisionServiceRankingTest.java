@@ -170,6 +170,73 @@ class DivisionServiceRankingTest {
     }
 
     @Test
+    void getDivisionRankings_WithFiveAthleteCascadingBracket_StillAwardsTwoBronzeMedals() {
+        // Given - 5-athlete cascading-bye bracket shape: round 1 has 2 real
+        // matches + 1 bye (not the old front-loaded "1 real + 3 byes"), so
+        // one eventual finalist (Athlete3) skips round 2 entirely and
+        // advances straight from round 1 to the final. The old "finalsRound-1
+        // losers get bronze" logic would only find ONE real match in round 2
+        // under this shape (Athlete5 vs Levy) and silently drop to 1 bronze
+        // instead of 2 - this is the regression the generalized "each
+        // finalist's own most recent real match" logic exists to prevent.
+        Athlete athlete5 = new Athlete();
+        athlete5.setId(5L);
+        athlete5.setName("Athlete 5");
+        athlete5.setTeam("Team E");
+
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+
+        List<Match> matches = new ArrayList<>();
+
+        // Round 1: Levy beats Neto; Athlete3 beats Athlete4; Athlete5 byes
+        matches.add(createMatch(1L, 1, athlete1, athlete2, athlete1, 6, 2));
+        matches.add(createMatch(2L, 1, athlete3, athlete4, athlete3, 4, 0));
+
+        Match byeMatch = new Match();
+        byeMatch.setId(3L);
+        byeMatch.setRoundNumber(1);
+        byeMatch.setMatchPosition(3);
+        byeMatch.setDivision(division);
+        byeMatch.setAthlete1(athlete5);
+        byeMatch.setAthlete2(null);
+        byeMatch.setWinner(athlete5);
+        byeMatch.setStatus(MatchStatus.WALKOVER);
+        matches.add(byeMatch);
+
+        // Round 2: Athlete3's win skips this round entirely (advances
+        // straight to the final) - only Athlete5 vs Levy is a real round-2
+        // match here, Levy wins
+        matches.add(createMatch(4L, 2, athlete5, athlete1, athlete1, 2, 6));
+
+        // Round 3 (final): Levy vs Athlete3 - Levy wins (GOLD), Athlete3 (SILVER)
+        matches.add(createMatch(5L, 3, athlete1, athlete3, athlete1, 8, 4));
+
+        when(matchRepository.findByDivisionIdOrderByRoundNumberAsc(1L)).thenReturn(matches);
+
+        // When
+        List<AthleteRankingDTO> rankings = divisionService.getDivisionRankings(1L);
+
+        // Then
+        AthleteRankingDTO gold = rankings.stream().filter(r -> r.getPosition() == 1).findFirst().orElseThrow();
+        assertEquals("Levy", gold.getAthleteName());
+        assertEquals("GOLD", gold.getMedal());
+
+        AthleteRankingDTO silver = rankings.stream().filter(r -> r.getPosition() == 2).findFirst().orElseThrow();
+        assertEquals("Athlete 3", silver.getAthleteName());
+        assertEquals("SILVER", silver.getMedal());
+
+        // Bronze: Athlete5 lost to Levy in round 2 (Levy's most recent real
+        // match before the final); Athlete4 lost to Athlete3 in round 1
+        // (Athlete3's only, and therefore most recent, real match before
+        // the final) - two bronzes despite the two finalists having played
+        // a different number of real matches to get there.
+        List<AthleteRankingDTO> bronzes = rankings.stream().filter(r -> r.getPosition() == 3).toList();
+        assertEquals(2, bronzes.size(), "two bronzes should still be awarded under the cascading bracket shape");
+        assertTrue(bronzes.stream().anyMatch(b -> "Athlete 5".equals(b.getAthleteName())));
+        assertTrue(bronzes.stream().anyMatch(b -> "Athlete 4".equals(b.getAthleteName())));
+    }
+
+    @Test
     void getDivisionRankings_WithNoMatchesGenerated_ReturnsEmptyList() {
         // Given
         division.setMatchesGenerated(false);

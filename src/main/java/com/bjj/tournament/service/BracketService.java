@@ -180,85 +180,131 @@ public class BracketService {
     
     /**
      * Generate single elimination bracket
-     * Standard tournament bracket where one loss eliminates the athlete
+     * Standard tournament bracket where one loss eliminates the athlete.
+     *
+     * Byes are minimized and cascaded rather than front-loaded: each round
+     * pairs up as many real matches as possible, and only the single
+     * leftover entrant (if the round's entrant count is odd) byes forward -
+     * into whichever round first has a free slot for them, which is
+     * sometimes the very next round and sometimes one round further (see
+     * the queue-based routing below). This matches how organizers actually
+     * expect a small field to look (e.g. 5 athletes = 2 real matches + 1
+     * athlete standing by in round 1), as opposed to front-loading every
+     * needed bye into round 1 alone.
      */
     private List<Match> generateSingleEliminationBracket(Division division, List<Athlete> athletes) {
         List<Match> matches = new ArrayList<>();
-
         int numAthletes = athletes.size();
 
-        // Size the bracket to the next power of two so byes are only ever
-        // needed in round 1, and every later round then has a clean
-        // power-of-two entrant count and never needs a bye of its own.
-        // Without this, an odd number of winners advancing into ANY later
-        // round (not just round 1) would leave one match there permanently
-        // missing an opponent, with nothing able to resolve it - e.g. 5
-        // athletes feeds an odd 3 winners into round 2, and 10 athletes
-        // feeds an odd 5 winners into round 2 despite 10 itself being even.
-        int bracketSize = 1;
-        while (bracketSize < numAthletes) {
-            bracketSize *= 2;
+        // Round-by-round composition (how many real matches, and whether a
+        // bye exists) is a pure function of N - independent of who wins
+        // anything. At most one bye per round, since n % 2 is never more
+        // than 1. The routing of WHO lands where (below) is what depends on
+        // match outcomes.
+        List<int[]> roundSizes = new ArrayList<>(); // {realMatches, hasBye(0/1)}
+        int n = numAthletes;
+        while (n > 1) {
+            int byes = n % 2;
+            int realMatches = n / 2;
+            roundSizes.add(new int[]{realMatches, byes});
+            n = realMatches + byes;
         }
-        int numByes = bracketSize - numAthletes;
-        int numFirstRoundMatches = bracketSize / 2;
 
-        // Create first round matches. The first `numByes` slots are byes
-        // (one athlete, auto-advances); the rest pair up the remaining
-        // athletes normally. Athletes are pre-shuffled by the caller, so
-        // handing byes to the first `numByes` of that shuffled order is
-        // equivalent to picking bye recipients at random - there's no
-        // skill-based seeding in this app to preserve otherwise.
+        // Round 1 is special: entrants are the shuffled athletes themselves,
+        // all known immediately - rather than winners of earlier matches.
+        int round1RealMatches = roundSizes.get(0)[0];
+        boolean round1HasBye = roundSizes.get(0)[1] == 1;
+
         int matchPosition = 1;
-        for (int i = 0; i < numFirstRoundMatches; i++) {
+        List<Match> previousRoundRealMatches = new ArrayList<>();
+        for (int i = 0; i < round1RealMatches; i++) {
             Match match = new Match();
             match.setDivision(division);
-
-            if (i < numByes) {
-                Athlete byeAthlete = athletes.get(i);
-                match.setAthlete1(byeAthlete);
-                match.setStatus(MatchStatus.WALKOVER);
-                match.setWinner(byeAthlete);
-            } else {
-                int athleteIndex = numByes + (i - numByes) * 2;
-                match.setAthlete1(athletes.get(athleteIndex));
-                match.setAthlete2(athletes.get(athleteIndex + 1));
-            }
-
             match.setRoundNumber(1);
             match.setMatchPosition(matchPosition++);
-            match.setStatus(match.getStatus() == null ? MatchStatus.PENDING : match.getStatus());
+            match.setAthlete1(athletes.get(2 * i));
+            match.setAthlete2(athletes.get(2 * i + 1));
+            match.setStatus(MatchStatus.PENDING);
             match.setDurationSeconds(getMatchDurationSeconds(division));
-
             matches.add(match);
+            previousRoundRealMatches.add(match);
         }
 
-        // Create placeholder matches for subsequent rounds. currentRoundSize
-        // is always a power of two here (bracketSize/2, then halving each
-        // round), so no round beyond round 1 ever needs its own bye.
-        int currentRoundSize = numFirstRoundMatches;
-        int roundNumber = 2;
-        matchPosition = 1;
+        // The single leftover athlete (if any) gets an explicit bye match,
+        // auto-decided immediately - same representation byes have always
+        // used. Unlike real matches, this doesn't get pre-filled into next
+        // round's slot directly here; it's routed via advancesTo* below and
+        // resolved by the existing auto-advance-after-save loop in
+        // generateMatchesAutomatically, same mechanism as any other bye.
+        Match byeCarryover = null;
+        if (round1HasBye) {
+            Athlete byeAthlete = athletes.get(athletes.size() - 1);
+            Match byeMatch = new Match();
+            byeMatch.setDivision(division);
+            byeMatch.setRoundNumber(1);
+            byeMatch.setMatchPosition(round1RealMatches + 1);
+            byeMatch.setAthlete1(byeAthlete);
+            byeMatch.setStatus(MatchStatus.WALKOVER);
+            byeMatch.setWinner(byeAthlete);
+            byeMatch.setDurationSeconds(getMatchDurationSeconds(division));
+            matches.add(byeMatch);
+            byeCarryover = byeMatch;
+        }
 
-        while (currentRoundSize > 1) {
-            int nextRoundSize = currentRoundSize / 2;
+        // Rounds 2+: entrants are always references to earlier matches
+        // (never raw athletes) - a match reference here means "whoever wins
+        // this match", whether that's already decided (a bye) or still
+        // pending (a real match awaiting a result).
+        for (int roundIndex = 1; roundIndex < roundSizes.size(); roundIndex++) {
+            int roundNumber = roundIndex + 1;
+            int realMatches = roundSizes.get(roundIndex)[0];
+            boolean hasBye = roundSizes.get(roundIndex)[1] == 1;
 
-            for (int i = 0; i < nextRoundSize; i++) {
+            // Queue order matters: the carryover goes FIRST so it always
+            // pairs into a real match this round rather than becoming the
+            // leftover again - this is what guarantees nobody ever byes two
+            // rounds in a row.
+            List<Match> queue = new ArrayList<>();
+            if (byeCarryover != null) {
+                queue.add(byeCarryover);
+            }
+            queue.addAll(previousRoundRealMatches);
+
+            List<Match> thisRoundRealMatches = new ArrayList<>();
+            matchPosition = 1;
+            for (int i = 0; i < realMatches; i++) {
+                Match feederA = queue.get(2 * i);
+                Match feederB = queue.get(2 * i + 1);
+
                 Match match = new Match();
                 match.setDivision(division);
                 match.setRoundNumber(roundNumber);
-                match.setMatchPosition(matchPosition++);
+                match.setMatchPosition(matchPosition);
                 match.setStatus(MatchStatus.PENDING);
                 match.setDurationSeconds(getMatchDurationSeconds(division));
-                // Athletes will be set as previous matches complete
-
                 matches.add(match);
+                thisRoundRealMatches.add(match);
+
+                feederA.setAdvancesToRound(roundNumber);
+                feederA.setAdvancesToPosition(matchPosition);
+                feederA.setAdvancesToSlot("ATHLETE1");
+
+                feederB.setAdvancesToRound(roundNumber);
+                feederB.setAdvancesToPosition(matchPosition);
+                feederB.setAdvancesToSlot("ATHLETE2");
+
+                matchPosition++;
             }
-            
-            currentRoundSize = nextRoundSize;
-            roundNumber++;
-            matchPosition = 1;
+
+            // The trailing queue entry (if the queue was odd-length) carries
+            // forward unresolved - no row is created for it at this round,
+            // it simply isn't paired yet. Its advancesTo* gets set whenever
+            // it's finally consumed, which the proof above guarantees
+            // happens in the very next round.
+            byeCarryover = hasBye ? queue.get(queue.size() - 1) : null;
+            previousRoundRealMatches = thisRoundRealMatches;
         }
-        
+
         return matches;
     }
     
@@ -428,35 +474,52 @@ public class BracketService {
         }
 
         // Find next round match where this winner should compete
-        int nextRound = completedMatch.getRoundNumber() + 1;
-        int nextMatchPosition = (completedMatch.getMatchPosition() + 1) / 2;
-        
+        int nextRound;
+        int nextMatchPosition;
+        boolean toAthlete1Slot;
+
+        if (completedMatch.getAdvancesToRound() != null) {
+            // Explicit routing, computed at generation time - needed because
+            // the cascading-bye bracket shape doesn't always advance exactly
+            // one round forward (a bye-carryover's source match lands two
+            // rounds ahead instead of one), so it can't be assumed generically.
+            nextRound = completedMatch.getAdvancesToRound();
+            nextMatchPosition = completedMatch.getAdvancesToPosition();
+            toAthlete1Slot = "ATHLETE1".equals(completedMatch.getAdvancesToSlot());
+        } else {
+            // No explicit routing stored: either a bracket generated before
+            // this field existed (always advanced exactly one round, so this
+            // computation still applies), or a genuine final (nothing further
+            // to advance to - correctly resolved below by finding no matches
+            // at the naively-computed next round, same as the legacy case).
+            nextRound = completedMatch.getRoundNumber() + 1;
+            nextMatchPosition = (completedMatch.getMatchPosition() + 1) / 2;
+            toAthlete1Slot = completedMatch.getMatchPosition() % 2 == 1;
+        }
+
         List<Match> nextRoundMatches = matchRepository.findByDivisionIdAndRoundNumber(
             division.getId(), nextRound);
-        
+
         if (nextRoundMatches.isEmpty()) {
             log.info("No next round - this was the final match");
-            
+
             // Mark division as completed
             division.setCompleted(true);
             divisionRepository.save(division);
             checkAndCompleteTournament(division);
             return;
         }
-        
+
         // Find the appropriate next match
         Match nextMatch = nextRoundMatches.stream()
             .filter(m -> m.getMatchPosition() == nextMatchPosition)
             .findFirst()
             .orElse(null);
-        
+
         if (nextMatch != null) {
-            // Determine if winner goes to athlete1 or athlete2 slot
-            if (completedMatch.getMatchPosition() % 2 == 1) {
-                // Odd match position goes to athlete1 slot
+            if (toAthlete1Slot) {
                 nextMatch.setAthlete1(winner);
             } else {
-                // Even match position goes to athlete2 slot
                 nextMatch.setAthlete2(winner);
             }
 

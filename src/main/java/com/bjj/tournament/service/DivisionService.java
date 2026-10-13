@@ -495,8 +495,9 @@ public class DivisionService {
             // 2nd place: Finals loser (SILVER) - guard against the finals match
             // itself somehow lacking a real opponent (shouldn't normally happen,
             // but avoids an NPE rather than assuming it never will)
+            Long silverWinnerId = null;
             if (finals.getAthlete1() != null && finals.getAthlete2() != null) {
-                Long silverWinnerId = finals.getAthlete1().getId().equals(goldWinnerId) ?
+                silverWinnerId = finals.getAthlete1().getId().equals(goldWinnerId) ?
                     finals.getAthlete2().getId() : finals.getAthlete1().getId();
                 AthleteRankingDTO silverWinner = athleteStats.get(silverWinnerId);
                 if (silverWinner != null) {
@@ -505,27 +506,41 @@ public class DivisionService {
                 }
             }
 
-            // 3rd place: Semi-finals losers (BRONZE)
-            // Semi-finals are one round before finals. A bye/walkover match
-            // (athlete2 == null) has no real opponent and therefore no loser to
-            // award bronze to, so it's excluded here rather than treated as a
-            // semifinal - e.g. with 3 athletes, the bye recipient advances
-            // straight to the final and isn't part of the bronze calculation.
-            List<Match> semifinals = matches.stream()
-                .filter(m -> m.getRoundNumber() == finalsRound - 1 && m.getWinner() != null
-                    && m.getAthlete1() != null && m.getAthlete2() != null)
-                .collect(Collectors.toList());
-
+            // 3rd place: BRONZE goes to whoever lost to each finalist in that
+            // finalist's own most recent real match before the final. This
+            // generalizes the old "semifinal loser" rule to work regardless of
+            // bracket shape: under the standard (byes-front-loaded) shape every
+            // round before the final is bye-free, so this reduces to exactly
+            // the semifinal; under the cascading-bye shape a finalist may have
+            // skipped a round via a bye, so their true most recent opponent
+            // isn't always in finalsRound-1. A bye/walkover match (athlete2 ==
+            // null) is never a real opponent and is excluded - e.g. a finalist
+            // who reached the final having played zero real matches (only
+            // possible for a 3-athlete bracket's bye recipient) simply has no
+            // bronze-eligible opponent.
             int bronzeCount = 0;
-            for (Match semi : semifinals) {
-                Long loserId = semi.getAthlete1().getId().equals(semi.getWinner().getId()) ?
-                    semi.getAthlete2().getId() : semi.getAthlete1().getId();
+            for (Long finalistId : Arrays.asList(goldWinnerId, silverWinnerId)) {
+                if (finalistId == null) {
+                    continue;
+                }
 
-                if (athleteStats.containsKey(loserId)) {
+                Optional<Match> mostRecentRealWin = matches.stream()
+                    .filter(m -> m.getRoundNumber() < finalsRound
+                        && m.getAthlete1() != null && m.getAthlete2() != null
+                        && m.getWinner() != null && m.getWinner().getId().equals(finalistId))
+                    .max(Comparator.comparing(Match::getRoundNumber));
+
+                if (mostRecentRealWin.isPresent()) {
+                    Match semi = mostRecentRealWin.get();
+                    Long loserId = semi.getAthlete1().getId().equals(finalistId) ?
+                        semi.getAthlete2().getId() : semi.getAthlete1().getId();
+
                     AthleteRankingDTO bronzeWinner = athleteStats.get(loserId);
-                    bronzeWinner.setPosition(3);
-                    bronzeWinner.setMedal("BRONZE");
-                    bronzeCount++;
+                    if (bronzeWinner != null) {
+                        bronzeWinner.setPosition(3);
+                        bronzeWinner.setMedal("BRONZE");
+                        bronzeCount++;
+                    }
                 }
             }
 

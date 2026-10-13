@@ -410,19 +410,95 @@ class BracketServiceTest {
     }
 
     @Test
+    void singleElimination_WithSixAthletes_ResolvesToOneChampionWithNoStuckMatches() {
+        assertBracketFullyResolves(6);
+    }
+
+    @Test
+    void singleElimination_WithSevenAthletes_ResolvesToOneChampionWithNoStuckMatches() {
+        assertBracketFullyResolves(7);
+    }
+
+    @Test
+    void singleElimination_WithNineAthletes_ResolvesToOneChampionWithNoStuckMatches() {
+        assertBracketFullyResolves(9);
+    }
+
+    @Test
     void singleElimination_WithTenAthletes_ResolvesToOneChampionWithNoStuckMatches() {
         assertBracketFullyResolves(10);
+    }
+
+    @Test
+    void singleElimination_WithElevenAthletes_ResolvesToOneChampionWithNoStuckMatches() {
+        assertBracketFullyResolves(11);
+    }
+
+    @Test
+    void singleElimination_WithFiveAthletes_Round1HasTwoRealMatchesAndOneBye() {
+        // The exact shape the user reported as broken: round 1 should pair up
+        // as many real matches as possible (2, for 4 of the 5 athletes) and
+        // give only the single leftover athlete a bye - not front-load all 3
+        // mathematically-possible byes into round 1 as the old power-of-two
+        // algorithm did.
+        division.setBracketType(BracketType.SINGLE_ELIMINATION);
+        List<Athlete> five = new ArrayList<>(athletes);
+        Athlete fifthAthlete = new Athlete();
+        fifthAthlete.setId(5L);
+        fifthAthlete.setName("Athlete 5");
+        five.add(fifthAthlete);
+        division.setAthletes(five);
+
+        // The round-1 bye is auto-advanced immediately (post-save loop in
+        // generateMatchesAutomatically), which calls advanceWinnerToNextRound
+        // and needs findById/matchPosition lookups to resolve - same pattern
+        // as the other tests here that generate a real bye.
+        List<Match> persisted = new ArrayList<>();
+        AtomicLong idSequence = new AtomicLong(1);
+
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
+        when(matchRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Match> toSave = invocation.getArgument(0);
+            for (Match m : toSave) {
+                if (m.getId() == null) {
+                    m.setId(idSequence.getAndIncrement());
+                }
+            }
+            persisted.addAll(toSave);
+            return toSave;
+        });
+        when(matchRepository.findById(any())).thenAnswer(invocation -> {
+            Long id = invocation.getArgument(0);
+            return persisted.stream().filter(m -> Objects.equals(m.getId(), id)).findFirst();
+        });
+
+        List<Match> matches = bracketService.generateMatchesAutomatically(1L);
+
+        List<Match> round1 = matches.stream().filter(m -> m.getRoundNumber() == 1).toList();
+        long realMatches = round1.stream()
+            .filter(m -> m.getAthlete1() != null && m.getAthlete2() != null)
+            .count();
+        long byeMatches = round1.stream()
+            .filter(m -> m.getStatus() == MatchStatus.WALKOVER)
+            .count();
+
+        assertThat(realMatches).as("round 1 should have 2 real matches, not 1").isEqualTo(2);
+        assertThat(byeMatches).as("round 1 should have exactly 1 bye, not 3").isEqualTo(1);
     }
 
     /**
      * Generates a single-elimination bracket for the given athlete count, then
      * simulates playing every match (athlete1 always wins, for determinism)
      * until no more matches can be completed. Asserts:
-     * - total generated matches = bracketSize - 1 (the standard single-elimination
-     *   invariant, where bracketSize is the next power of two >= athleteCount)
+     * - total generated match rows = (athleteCount - 1) + (1 if athleteCount is
+     *   odd, else 0) - every real match eliminates exactly one person
+     *   (athleteCount - 1 of those are needed total), plus one extra row only
+     *   when round 1 itself has a bye (only round 1 ever materializes an
+     *   explicit bye row under the cascading scheme - see generateSingleEliminationBracket)
      * - every athlete appears in round 1 exactly once (nobody dropped)
      * - every single match ends up decided (WALKOVER or COMPLETED) - none left
-     *   stuck in PENDING with a permanently-missing opponent
+     *   stuck in PENDING with a permanently-missing opponent, even when a
+     *   winner must skip an entire round via advancesToRound/Position/Slot
      * - exactly one champion emerges in the final round
      */
     private void assertBracketFullyResolves(int athleteCount) {
@@ -469,12 +545,9 @@ class BracketServiceTest {
 
         List<Match> matches = bracketService.generateMatchesAutomatically(1L);
 
-        int bracketSize = 1;
-        while (bracketSize < athleteCount) {
-            bracketSize *= 2;
-        }
-        assertThat(matches).as("total matches for %d athletes (bracket size %d)", athleteCount, bracketSize)
-            .hasSize(bracketSize - 1);
+        int expectedRows = (athleteCount - 1) + (athleteCount % 2);
+        assertThat(matches).as("total match rows for %d athletes", athleteCount)
+            .hasSize(expectedRows);
 
         List<Match> round1 = matches.stream().filter(m -> m.getRoundNumber() == 1).toList();
         List<Long> round1AthleteIds = round1.stream()

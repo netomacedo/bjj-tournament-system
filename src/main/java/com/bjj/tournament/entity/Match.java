@@ -93,6 +93,29 @@ public class Match {
      */
     @Column(name = "match_position")
     private Integer matchPosition;
+
+    /**
+     * Explicit routing for this match's eventual winner, computed once at
+     * bracket-generation time (single elimination only). Needed because the
+     * cascading-bye bracket shape doesn't always advance a winner exactly
+     * one round forward - a winner who isn't immediately paired next round
+     * becomes that round's bye-carryover and lands two rounds ahead instead
+     * of one, so "nextRound = roundNumber + 1" can't be assumed generically.
+     * Null for the final match (nothing further to advance to) and for
+     * matches generated before this field existed - advanceWinnerToNextRound
+     * falls back to the old parity-based computation in both of those cases.
+     */
+    @Column(name = "advances_to_round")
+    private Integer advancesToRound;
+
+    @Column(name = "advances_to_position")
+    private Integer advancesToPosition;
+
+    /**
+     * Which slot of the destination match this winner fills: "ATHLETE1" or "ATHLETE2".
+     */
+    @Column(name = "advances_to_slot", length = 10)
+    private String advancesToSlot;
     
     /**
      * Mat/ring number where the match is scheduled
