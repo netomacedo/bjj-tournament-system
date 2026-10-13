@@ -46,5 +46,31 @@ CREATE INDEX IF NOT EXISTS idx_match_winner ON public.matches (winner_id);
 -- same columns. Dropping the explicitly-named ones leaves the
 -- constraint-backed ones in place, so uniqueness is still enforced
 -- identically with one index per column instead of two.
-DROP INDEX IF EXISTS public.idx_user_username;
-DROP INDEX IF EXISTS public.idx_user_email;
+--
+-- Only drop an index when no constraint depends on it. On databases
+-- where Hibernate created the unique constraint itself, the constraint
+-- is NAMED idx_user_username / idx_user_email, so that index IS the
+-- constraint and Postgres refuses to drop it (it is already the single
+-- index per column, which is the goal here).
+DO $$
+DECLARE
+    idx_name text;
+BEGIN
+    FOREACH idx_name IN ARRAY ARRAY['idx_user_username', 'idx_user_email']
+    LOOP
+        IF EXISTS (
+            SELECT 1
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relname = idx_name
+              AND c.relkind = 'i'
+              AND NOT EXISTS (
+                  SELECT 1 FROM pg_constraint k WHERE k.conindid = c.oid
+              )
+        ) THEN
+            EXECUTE format('DROP INDEX public.%I', idx_name);
+        END IF;
+    END LOOP;
+END
+$$;
