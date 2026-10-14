@@ -8,6 +8,7 @@ import com.bjj.tournament.repository.AthleteRepository;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
 import com.bjj.tournament.repository.TournamentRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +40,9 @@ class DivisionServiceRankingTest {
     @Mock
     private MatchRepository matchRepository;
 
+    @Mock
+    private OrganizationAccessGuard organizationAccessGuard;
+
     @InjectMocks
     private DivisionService divisionService;
 
@@ -50,8 +54,13 @@ class DivisionServiceRankingTest {
 
     @BeforeEach
     void setUp() {
+        Tournament tournament = new Tournament();
+        tournament.setId(100L);
+        tournament.setOrganizationId(1L);
+
         division = new Division();
         division.setId(1L);
+        division.setTournament(tournament);
         division.setMatchesGenerated(true);
 
         athlete1 = new Athlete();

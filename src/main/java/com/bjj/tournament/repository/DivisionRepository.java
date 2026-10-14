@@ -33,12 +33,14 @@ public interface DivisionRepository extends JpaRepository<Division, Long> {
     );
     
     /**
-     * Find divisions that haven't generated matches yet. A single enrolled
-     * athlete still counts as "ready" - per IBJJF rules they're awarded gold
-     * automatically rather than needing an opponent.
+     * Find divisions that haven't generated matches yet, scoped to one
+     * organization. A single enrolled athlete still counts as "ready" - per
+     * IBJJF rules they're awarded gold automatically rather than needing an
+     * opponent.
      */
-    @Query("SELECT d FROM Division d WHERE d.matchesGenerated = false AND SIZE(d.athletes) >= 1")
-    List<Division> findDivisionsReadyForMatchGeneration();
+    @Query("SELECT d FROM Division d WHERE d.tournament.organizationId = :organizationId "
+        + "AND d.matchesGenerated = false AND SIZE(d.athletes) >= 1")
+    List<Division> findDivisionsReadyForMatchGeneration(Long organizationId);
     
     /**
      * Find completed divisions

@@ -9,6 +9,7 @@ import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
 import com.bjj.tournament.repository.TournamentRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,25 +25,27 @@ import java.util.*;
 @RequiredArgsConstructor
 @Slf4j
 public class BracketService {
-    
+
     private final DivisionRepository divisionRepository;
     private final MatchRepository matchRepository;
     private final TournamentRepository tournamentRepository;
-    
+    private final OrganizationAccessGuard organizationAccessGuard;
+
     /**
      * Generate matches automatically for a division
      * Uses seeding and bracket logic to create fair matchups
-     * 
+     *
      * @param divisionId ID of the division
      * @return List of generated matches
      */
     @Transactional
     public List<Match> generateMatchesAutomatically(Long divisionId) {
         log.info("Generating matches automatically for division ID: {}", divisionId);
-        
+
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
-        
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
+
         if (division.getMatchesGenerated()) {
             throw new IllegalStateException("Matches have already been generated for this division");
         }
@@ -128,11 +131,12 @@ public class BracketService {
         
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
-        
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
+
         if (division.getMatchesGenerated()) {
             throw new IllegalStateException("Matches have already been generated for this division");
         }
-        
+
         List<Match> matches = new ArrayList<>();
         List<Athlete> athletes = division.getAthletes();
         Map<Long, Athlete> athleteMap = new HashMap<>();
@@ -444,7 +448,8 @@ public class BracketService {
         
         Match completedMatch = matchRepository.findById(matchId)
             .orElseThrow(() -> new IllegalArgumentException("Match not found with ID: " + matchId));
-        
+        organizationAccessGuard.checkAccess(completedMatch.getDivision().getTournament().getOrganizationId());
+
         if (completedMatch.getStatus() != MatchStatus.COMPLETED
                 && completedMatch.getStatus() != MatchStatus.WALKOVER) {
             throw new IllegalStateException("Match must be completed before advancing winner");

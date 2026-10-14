@@ -65,6 +65,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/h2-console/**").permitAll()
 
+                        // Platform-admin-only endpoints (onboarding new organizations) -
+                        // must come before the broader rules below, same reasoning as
+                        // the /api/auth/register exception above
+                        .requestMatchers("/api/platform/**").hasRole("PLATFORM_ADMIN")
+
                         // Admin endpoints - require ADMIN role
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 

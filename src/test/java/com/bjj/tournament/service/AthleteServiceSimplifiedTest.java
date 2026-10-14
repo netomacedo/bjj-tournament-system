@@ -2,12 +2,17 @@ package com.bjj.tournament.service;
 
 import com.bjj.tournament.dto.AthleteRegistrationDTO;
 import com.bjj.tournament.entity.Athlete;
+import com.bjj.tournament.entity.User;
 import com.bjj.tournament.enums.BeltRank;
 import com.bjj.tournament.enums.Gender;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +31,27 @@ class AthleteServiceSimplifiedTest {
 
     @Autowired
     private AthleteService athleteService;
+
+    @BeforeEach
+    void setUpSecurityContext() {
+        // AthleteService.registerAthlete reads the caller's organization via
+        // OrganizationAccessGuard, which reads the Spring Security principal -
+        // this test calls the service directly (not through a real HTTP
+        // request), so there's no JwtAuthenticationFilter to populate that
+        // automatically. Push a fake authenticated org-admin in instead.
+        User currentUser = new User();
+        currentUser.setId(1L);
+        currentUser.setUsername("test-admin");
+        currentUser.setRole("ROLE_ADMIN");
+        currentUser.setOrganizationId(1L);
+        SecurityContextHolder.getContext().setAuthentication(
+            new UsernamePasswordAuthenticationToken(currentUser, null, currentUser.getAuthorities()));
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     @DisplayName("Should register athlete with only essential fields (age, name, belt, weight)")

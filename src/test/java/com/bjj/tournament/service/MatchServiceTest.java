@@ -5,9 +5,12 @@ import com.bjj.tournament.dto.MatchUpdateDTO;
 import com.bjj.tournament.entity.Athlete;
 import com.bjj.tournament.entity.Division;
 import com.bjj.tournament.entity.Match;
+import com.bjj.tournament.entity.Tournament;
 import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.AthleteRepository;
+import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,7 +42,13 @@ class MatchServiceTest {
     private AthleteRepository athleteRepository;
 
     @Mock
+    private DivisionRepository divisionRepository;
+
+    @Mock
     private BracketService bracketService;
+
+    @Mock
+    private OrganizationAccessGuard organizationAccessGuard;
 
     @InjectMocks
     private MatchService matchService;
@@ -51,9 +60,14 @@ class MatchServiceTest {
 
     @BeforeEach
     void setUp() {
+        Tournament tournament = new Tournament();
+        tournament.setId(100L);
+        tournament.setOrganizationId(1L);
+
         // Create test division
         division = new Division();
         division.setId(1L);
+        division.setTournament(tournament);
         division.setName("Adult Male Blue Belt");
 
         // Create test athletes
@@ -123,6 +137,7 @@ class MatchServiceTest {
         match2.setMatchPosition(2);
         match2.setStatus(MatchStatus.PENDING);
 
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
         when(matchRepository.findByDivisionId(1L)).thenReturn(Arrays.asList(testMatch, match2));
 
         // When
@@ -345,6 +360,7 @@ class MatchServiceTest {
     @Test
     void getMatchesByDivisionAndRound_ReturnsFilteredMatches() {
         // Given
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
         when(matchRepository.findByDivisionIdAndRoundNumber(1L, 1)).thenReturn(Arrays.asList(testMatch));
 
         // When
@@ -359,6 +375,7 @@ class MatchServiceTest {
     @Test
     void getPendingMatches_ReturnsOnlyPendingMatches() {
         // Given
+        when(divisionRepository.findById(1L)).thenReturn(Optional.of(division));
         when(matchRepository.findPendingMatchesByDivision(1L)).thenReturn(Arrays.asList(testMatch));
 
         // When

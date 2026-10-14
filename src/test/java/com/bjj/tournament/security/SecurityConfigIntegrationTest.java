@@ -58,12 +58,16 @@ class SecurityConfigIntegrationTest {
 
         // Registration now requires an existing admin (self-registration is disabled),
         // so seed one directly via the repository, bypassing the HTTP endpoint.
+        // organizationId must be set - UserService.registerUser derives the new
+        // user's organization from the authenticated caller and refuses to run
+        // for an org-less (platform-admin-shaped) caller.
         User admin = new User();
         admin.setUsername(ADMIN_USERNAME);
         admin.setEmail("bootstrap-admin@test.com");
         admin.setPassword(passwordEncoder.encode(ADMIN_PASSWORD));
         admin.setFullName("Bootstrap Admin");
         admin.setRole("ROLE_ADMIN");
+        admin.setOrganizationId(1L);
         userRepository.save(admin);
 
         // Create registration DTO

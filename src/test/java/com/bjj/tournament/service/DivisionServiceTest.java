@@ -10,6 +10,7 @@ import com.bjj.tournament.enums.*;
 import com.bjj.tournament.repository.AthleteRepository;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.TournamentRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +45,9 @@ class DivisionServiceTest {
 
     @Mock
     private AthleteRepository athleteRepository;
+
+    @Mock
+    private OrganizationAccessGuard organizationAccessGuard;
 
     @InjectMocks
     private DivisionService divisionService;
@@ -208,7 +212,7 @@ class DivisionServiceTest {
     @Test
     void testGetDivisionsByTournament_WithValidTournamentId_ShouldReturnList() {
         // Given
-        when(tournamentRepository.existsById(1L)).thenReturn(true);
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
         when(divisionRepository.findByTournamentIdOrderByIdAsc(1L)).thenReturn(Arrays.asList(division));
 
         // When
@@ -223,7 +227,7 @@ class DivisionServiceTest {
     @Test
     void testGetDivisionsByTournament_WithInvalidTournamentId_ShouldThrowException() {
         // Given
-        when(tournamentRepository.existsById(anyLong())).thenReturn(false);
+        when(tournamentRepository.findById(999L)).thenReturn(Optional.empty());
 
         // When/Then
         assertThatThrownBy(() -> divisionService.getDivisionsByTournament(999L))
@@ -494,7 +498,8 @@ class DivisionServiceTest {
     @Test
     void testGetDivisionsReadyForMatchGeneration_ShouldReturnList() {
         // Given
-        when(divisionRepository.findDivisionsReadyForMatchGeneration()).thenReturn(Arrays.asList(division));
+        when(organizationAccessGuard.currentOrganizationId()).thenReturn(1L);
+        when(divisionRepository.findDivisionsReadyForMatchGeneration(1L)).thenReturn(Arrays.asList(division));
 
         // When
         List<DivisionResponseDTO> result = divisionService.getDivisionsReadyForMatchGeneration();
@@ -502,6 +507,6 @@ class DivisionServiceTest {
         // Then
         assertThat(result).isNotNull();
         assertThat(result).hasSize(1);
-        verify(divisionRepository, times(1)).findDivisionsReadyForMatchGeneration();
+        verify(divisionRepository, times(1)).findDivisionsReadyForMatchGeneration(1L);
     }
 }

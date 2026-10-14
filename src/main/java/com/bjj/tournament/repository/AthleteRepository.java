@@ -18,58 +18,68 @@ import java.util.Optional;
 public interface AthleteRepository extends JpaRepository<Athlete, Long> {
     
     /**
-     * Find athletes by belt rank
+     * Find every athlete on one organization's roster
      */
-    List<Athlete> findByBeltRank(BeltRank beltRank);
-    
+    List<Athlete> findByOrganizationId(Long organizationId);
+
     /**
-     * Find athletes by gender
+     * Find athletes by belt rank, scoped to one organization
      */
-    List<Athlete> findByGender(Gender gender);
-    
+    List<Athlete> findByOrganizationIdAndBeltRank(Long organizationId, BeltRank beltRank);
+
     /**
-     * Find athletes by age range
+     * Find athletes by gender, scoped to one organization
      */
-    List<Athlete> findByAgeBetween(Integer minAge, Integer maxAge);
-    
+    List<Athlete> findByOrganizationIdAndGender(Long organizationId, Gender gender);
+
     /**
-     * Find athletes by belt rank and age range
+     * Find athletes by age range, scoped to one organization
      */
-    List<Athlete> findByBeltRankAndAgeBetween(BeltRank beltRank, Integer minAge, Integer maxAge);
-    
+    List<Athlete> findByOrganizationIdAndAgeBetween(Long organizationId, Integer minAge, Integer maxAge);
+
     /**
-     * Find athletes by belt rank, gender, and age range
+     * Find athletes by belt rank and age range, scoped to one organization
      */
-    List<Athlete> findByBeltRankAndGenderAndAgeBetween(
-        BeltRank beltRank, 
-        Gender gender, 
-        Integer minAge, 
+    List<Athlete> findByOrganizationIdAndBeltRankAndAgeBetween(
+        Long organizationId, BeltRank beltRank, Integer minAge, Integer maxAge);
+
+    /**
+     * Find athletes by belt rank, gender, and age range, scoped to one organization
+     */
+    List<Athlete> findByOrganizationIdAndBeltRankAndGenderAndAgeBetween(
+        Long organizationId,
+        BeltRank beltRank,
+        Gender gender,
+        Integer minAge,
         Integer maxAge
     );
-    
+
     /**
-     * Find athlete by email
+     * Find athlete by email, scoped to one organization (the same email can
+     * be registered independently by two different organizations - only
+     * username/email on User, the login identity, is globally unique)
      */
-    Optional<Athlete> findByEmail(String email);
-    
+    Optional<Athlete> findByOrganizationIdAndEmail(Long organizationId, String email);
+
     /**
-     * Check if athlete exists by email
+     * Check if athlete exists by email, scoped to one organization
      */
-    boolean existsByEmail(String email);
-    
+    boolean existsByOrganizationIdAndEmail(Long organizationId, String email);
+
     /**
-     * Find athletes by team
+     * Find athletes by team, scoped to one organization
      */
-    List<Athlete> findByTeam(String team);
-    
+    List<Athlete> findByOrganizationIdAndTeam(Long organizationId, String team);
+
     /**
-     * Find athletes by coach name
+     * Find athletes by coach name, scoped to one organization
      */
-    List<Athlete> findByCoachName(String coachName);
-    
+    List<Athlete> findByOrganizationIdAndCoachName(Long organizationId, String coachName);
+
     /**
-     * Search athletes by name (case-insensitive, partial match)
+     * Search athletes by name (case-insensitive, partial match), scoped to one organization
      */
-    @Query("SELECT a FROM Athlete a WHERE LOWER(a.name) LIKE LOWER(CONCAT('%', :name, '%'))")
-    List<Athlete> searchByName(String name);
+    @Query("SELECT a FROM Athlete a WHERE a.organizationId = :organizationId "
+        + "AND LOWER(a.name) LIKE LOWER(CONCAT('%', :name, '%'))")
+    List<Athlete> searchByName(Long organizationId, String name);
 }

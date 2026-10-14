@@ -37,7 +37,16 @@ public class Tournament {
      */
     @Version
     private Long version;
-    
+
+    /**
+     * The organization that owns this tournament. A plain scalar id rather
+     * than a mapped relationship - every multi-tenant query/check only ever
+     * needs to compare this id, never load the Organization itself, so a
+     * relationship would just be unnecessary lazy-loading overhead.
+     */
+    @Column(name = "organization_id")
+    private Long organizationId;
+
     /**
      * Name of the tournament (e.g., "Summer BJJ Championship 2025")
      */

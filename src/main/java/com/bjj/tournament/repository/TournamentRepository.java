@@ -15,20 +15,26 @@ import java.util.List;
 public interface TournamentRepository extends JpaRepository<Tournament, Long> {
     
     /**
-     * Find tournaments by registration status
+     * Find every tournament belonging to one organization
      */
-    List<Tournament> findByRegistrationOpen(Boolean registrationOpen);
-    
+    List<Tournament> findByOrganizationId(Long organizationId);
+
     /**
-     * Find upcoming tournaments (future date, not completed)
+     * Find tournaments by registration status, scoped to one organization
      */
-    @Query("SELECT t FROM Tournament t WHERE t.tournamentDate >= :currentDate AND t.completed = false ORDER BY t.tournamentDate ASC")
-    List<Tournament> findUpcomingTournaments(LocalDate currentDate);
-    
+    List<Tournament> findByOrganizationIdAndRegistrationOpen(Long organizationId, Boolean registrationOpen);
+
     /**
-     * Find completed tournaments
+     * Find upcoming tournaments (future date, not completed), scoped to one organization
      */
-    List<Tournament> findByCompleted(Boolean completed);
+    @Query("SELECT t FROM Tournament t WHERE t.organizationId = :organizationId "
+        + "AND t.tournamentDate >= :currentDate AND t.completed = false ORDER BY t.tournamentDate ASC")
+    List<Tournament> findUpcomingTournaments(Long organizationId, LocalDate currentDate);
+
+    /**
+     * Find completed tournaments, scoped to one organization
+     */
+    List<Tournament> findByOrganizationIdAndCompleted(Long organizationId, Boolean completed);
     
     /**
      * Find tournaments by date range

@@ -13,6 +13,7 @@ import com.bjj.tournament.repository.AthleteRepository;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
 import com.bjj.tournament.repository.TournamentRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ public class DivisionService {
     private final AthleteRepository athleteRepository;
     private final MatchRepository matchRepository;
     private final EntityManager entityManager;
+    private final OrganizationAccessGuard organizationAccessGuard;
 
     /**
      * Create a new division for a tournament
@@ -47,6 +49,7 @@ public class DivisionService {
         // Validate tournament exists and registration is open
         Tournament tournament = tournamentRepository.findById(tournamentId)
             .orElseThrow(() -> new IllegalArgumentException("Tournament not found with ID: " + tournamentId));
+        organizationAccessGuard.checkAccess(tournament.getOrganizationId());
 
         if (!tournament.getRegistrationOpen()) {
             throw new IllegalStateException("Tournament registration is closed");
@@ -94,6 +97,7 @@ public class DivisionService {
     public DivisionResponseDTO getDivisionById(Long divisionId) {
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
 
         return convertToResponseDTO(division);
     }
@@ -103,10 +107,9 @@ public class DivisionService {
      */
     @Transactional(readOnly = true)
     public List<DivisionResponseDTO> getDivisionsByTournament(Long tournamentId) {
-        // Validate tournament exists
-        if (!tournamentRepository.existsById(tournamentId)) {
-            throw new IllegalArgumentException("Tournament not found with ID: " + tournamentId);
-        }
+        Tournament tournament = tournamentRepository.findById(tournamentId)
+            .orElseThrow(() -> new IllegalArgumentException("Tournament not found with ID: " + tournamentId));
+        organizationAccessGuard.checkAccess(tournament.getOrganizationId());
 
         List<Division> divisions = divisionRepository.findByTournamentIdOrderByIdAsc(tournamentId);
         return divisions.stream()
@@ -124,6 +127,7 @@ public class DivisionService {
 
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
 
         // Cannot update if matches have been generated
         if (division.getMatchesGenerated()) {
@@ -168,6 +172,7 @@ public class DivisionService {
 
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
 
         log.info("Division found: {}", division.getName());
         log.info("Matches generated: {}", division.getMatchesGenerated());
@@ -213,9 +218,21 @@ public class DivisionService {
 
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
 
         Athlete athlete = athleteRepository.findById(athleteId)
             .orElseThrow(() -> new IllegalArgumentException("Athlete not found with ID: " + athleteId));
+        organizationAccessGuard.checkAccess(athlete.getOrganizationId());
+
+        // division_athletes is the one place two independently org-scoped
+        // entities get linked - both already passed their own ownership
+        // check above (ruling out a caller from a third org), but that alone
+        // doesn't rule out an org-A admin enrolling an org-B athlete into an
+        // org-A division if both IDs were guessable, since org-A's own
+        // checkAccess calls above would both pass independently.
+        if (!Objects.equals(athlete.getOrganizationId(), division.getTournament().getOrganizationId())) {
+            throw new IllegalArgumentException("Athlete does not belong to this division's organization");
+        }
 
         // Validate tournament registration is open
         if (!division.getTournament().getRegistrationOpen()) {
@@ -252,6 +269,7 @@ public class DivisionService {
 
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
 
         Athlete athlete = athleteRepository.findById(athleteId)
             .orElseThrow(() -> new IllegalArgumentException("Athlete not found with ID: " + athleteId));
@@ -281,16 +299,19 @@ public class DivisionService {
     public List<Athlete> getAthletesByDivision(Long divisionId) {
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
 
         return division.getAthletes();
     }
 
     /**
-     * Get divisions ready for match generation (1+ athletes, no matches generated yet)
+     * Get divisions ready for match generation (1+ athletes, no matches
+     * generated yet), scoped to the caller's organization
      */
     @Transactional(readOnly = true)
     public List<DivisionResponseDTO> getDivisionsReadyForMatchGeneration() {
-        List<Division> divisions = divisionRepository.findDivisionsReadyForMatchGeneration();
+        List<Division> divisions = divisionRepository.findDivisionsReadyForMatchGeneration(
+            organizationAccessGuard.currentOrganizationId());
         return divisions.stream()
             .map(this::convertToResponseDTO)
             .collect(Collectors.toList());
@@ -358,6 +379,7 @@ public class DivisionService {
 
         Division division = divisionRepository.findById(divisionId)
             .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
 
         if (!division.getMatchesGenerated()) {
             log.warn("Matches not generated yet for division ID: {}", divisionId);

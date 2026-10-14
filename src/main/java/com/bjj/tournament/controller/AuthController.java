@@ -60,6 +60,7 @@ public class AuthController {
                     user.getFullName(),
                     user.getRole()
             );
+            response.setOrganizationId(user.getOrganizationId());
 
             log.info("User registered successfully: {}", user.getUsername());
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -103,6 +104,7 @@ public class AuthController {
                     user.getFullName(),
                     user.getRole()
             );
+            response.setOrganizationId(user.getOrganizationId());
 
             log.info("User logged in successfully: {}", user.getUsername());
             return ResponseEntity.ok(response);
@@ -136,6 +138,7 @@ public class AuthController {
                     user.getFullName(),
                     user.getRole()
             );
+            response.setOrganizationId(user.getOrganizationId());
 
             return ResponseEntity.ok(response);
 
@@ -172,6 +175,7 @@ public class AuthController {
                     user.getFullName(),
                     user.getRole()
             );
+            response.setOrganizationId(user.getOrganizationId());
 
             log.info("Token refreshed successfully for user: {}", user.getUsername());
             return ResponseEntity.ok(response);
@@ -198,6 +202,7 @@ public class AuthController {
     /**
      * TEMPORARY: List all users (for debugging)
      * GET /api/auth/users/all
+     * Scoped to the caller's own organization - a platform admin sees everyone.
      */
     @GetMapping("/users/all")
     public ResponseEntity<?> getAllUsers() {
@@ -206,7 +211,7 @@ public class AuthController {
 
         // Return simplified user info (no passwords)
         var userInfo = users.stream()
-            .map(u -> new UserInfo(u.getId(), u.getUsername(), u.getEmail(), u.getFullName(), u.getRole(), u.isEnabled()))
+            .map(u -> new UserInfo(u.getId(), u.getUsername(), u.getEmail(), u.getFullName(), u.getRole(), u.isEnabled(), u.getOrganizationId()))
             .toList();
 
         log.info("Found {} users", userInfo.size());
@@ -214,9 +219,44 @@ public class AuthController {
     }
 
     /**
+     * Change the current user's own password (self-service)
+     * POST /api/auth/change-password
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request,
+                                             Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ErrorResponse("Not authenticated"));
+        }
+
+        try {
+            User user = userService.getUserByUsername(authentication.getName());
+            userService.changePassword(user, request.currentPassword(), request.newPassword());
+            return ResponseEntity.ok(new MessageResponse("Password changed successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Failed to change password", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("Failed to change password"));
+        }
+    }
+
+    /**
      * User info response (no password)
      */
-    record UserInfo(Long id, String username, String email, String fullName, String role, Boolean enabled) {}
+    record UserInfo(Long id, String username, String email, String fullName, String role, Boolean enabled, Long organizationId) {}
+
+    /**
+     * Change password request
+     */
+    record ChangePasswordRequest(
+        @jakarta.validation.constraints.NotBlank(message = "Current password is required") String currentPassword,
+        @jakarta.validation.constraints.NotBlank(message = "New password is required")
+        @jakarta.validation.constraints.Size(min = 6, max = 100, message = "New password must be between 6 and 100 characters")
+        String newPassword
+    ) {}
 
     /**
      * Error response class

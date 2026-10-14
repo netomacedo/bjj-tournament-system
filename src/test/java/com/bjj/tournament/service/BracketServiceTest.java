@@ -10,6 +10,7 @@ import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
 import com.bjj.tournament.repository.TournamentRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +46,9 @@ class BracketServiceTest {
     @Mock
     private TournamentRepository tournamentRepository;
 
+    @Mock
+    private OrganizationAccessGuard organizationAccessGuard;
+
     @InjectMocks
     private BracketService bracketService;
 
@@ -53,8 +57,13 @@ class BracketServiceTest {
 
     @BeforeEach
     void setUp() {
+        Tournament tournament = new Tournament();
+        tournament.setId(100L);
+        tournament.setOrganizationId(1L);
+
         division = new Division();
         division.setId(1L);
+        division.setTournament(tournament);
         division.setBracketType(BracketType.ROUND_ROBIN);
         division.setAgeCategory(AgeCategory.ADULT);
         division.setMatchesGenerated(false);
@@ -502,8 +511,13 @@ class BracketServiceTest {
      * - exactly one champion emerges in the final round
      */
     private void assertBracketFullyResolves(int athleteCount) {
+        Tournament testTournament = new Tournament();
+        testTournament.setId(200L);
+        testTournament.setOrganizationId(1L);
+
         Division testDivision = new Division();
         testDivision.setId(1L);
+        testDivision.setTournament(testTournament);
         testDivision.setBracketType(BracketType.SINGLE_ELIMINATION);
         testDivision.setAgeCategory(AgeCategory.ADULT);
         testDivision.setMatchesGenerated(false);

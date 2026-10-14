@@ -3,10 +3,13 @@ package com.bjj.tournament.service;
 import com.bjj.tournament.dto.MatchResponseDTO;
 import com.bjj.tournament.dto.MatchUpdateDTO;
 import com.bjj.tournament.entity.Athlete;
+import com.bjj.tournament.entity.Division;
 import com.bjj.tournament.entity.Match;
 import com.bjj.tournament.enums.MatchStatus;
 import com.bjj.tournament.repository.AthleteRepository;
+import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,18 +26,33 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class MatchService {
-    
+
     private final MatchRepository matchRepository;
     private final AthleteRepository athleteRepository;
+    private final DivisionRepository divisionRepository;
     private final BracketService bracketService;
-    
+    private final OrganizationAccessGuard organizationAccessGuard;
+
     /**
      * Get match entity by ID
      */
     @Transactional(readOnly = true)
     public Match getMatchEntityById(Long id) {
-        return matchRepository.findById(id)
+        Match match = matchRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Match not found with ID: " + id));
+        organizationAccessGuard.checkAccess(match.getDivision().getTournament().getOrganizationId());
+        return match;
+    }
+
+    /**
+     * Confirms the division exists and belongs to the caller's organization,
+     * for the methods below that query matches by divisionId directly
+     * rather than starting from an already-loaded Match.
+     */
+    private void checkDivisionAccess(Long divisionId) {
+        Division division = divisionRepository.findById(divisionId)
+            .orElseThrow(() -> new IllegalArgumentException("Division not found with ID: " + divisionId));
+        organizationAccessGuard.checkAccess(division.getTournament().getOrganizationId());
     }
 
     /**
@@ -42,30 +60,36 @@ public class MatchService {
      */
     @Transactional(readOnly = true)
     public List<Match> getMatchEntitiesByDivision(Long divisionId) {
+        checkDivisionAccess(divisionId);
         return matchRepository.findByDivisionId(divisionId);
     }
-    
+
     /**
      * Get matches for a specific round in a division
      */
     @Transactional(readOnly = true)
     public List<Match> getMatchesByDivisionAndRound(Long divisionId, Integer roundNumber) {
+        checkDivisionAccess(divisionId);
         return matchRepository.findByDivisionIdAndRoundNumber(divisionId, roundNumber);
     }
-    
+
     /**
      * Get all matches for a specific athlete
      */
     @Transactional(readOnly = true)
     public List<Match> getMatchesByAthlete(Long athleteId) {
+        Athlete athlete = athleteRepository.findById(athleteId)
+            .orElseThrow(() -> new IllegalArgumentException("Athlete not found with ID: " + athleteId));
+        organizationAccessGuard.checkAccess(athlete.getOrganizationId());
         return matchRepository.findMatchesByAthleteId(athleteId);
     }
-    
+
     /**
      * Get pending matches for a division
      */
     @Transactional(readOnly = true)
     public List<Match> getPendingMatches(Long divisionId) {
+        checkDivisionAccess(divisionId);
         return matchRepository.findPendingMatchesByDivision(divisionId);
     }
     
@@ -269,9 +293,7 @@ public class MatchService {
      */
     @Transactional(readOnly = true)
     public MatchResponseDTO getMatchById(Long id) {
-        Match match = matchRepository.findById(id)
-            .orElseThrow(() -> new IllegalArgumentException("Match not found with ID: " + id));
-        return convertToDTO(match);
+        return convertToDTO(getMatchEntityById(id));
     }
 
     /**
@@ -279,6 +301,7 @@ public class MatchService {
      */
     @Transactional(readOnly = true)
     public List<MatchResponseDTO> getMatchesByDivision(Long divisionId) {
+        checkDivisionAccess(divisionId);
         List<Match> matches = matchRepository.findByDivisionId(divisionId);
         return matches.stream()
             .map(this::convertToDTO)
@@ -458,8 +481,7 @@ public class MatchService {
     private Match updateMatchInternal(Long matchId, MatchUpdateDTO updateDTO) {
         log.info("Updating match ID: {}", matchId);
 
-        Match match = matchRepository.findById(matchId)
-            .orElseThrow(() -> new IllegalArgumentException("Match not found with ID: " + matchId));
+        Match match = getMatchEntityById(matchId);
 
         // Update scores if provided
         if (updateDTO.getAthlete1Points() != null) {

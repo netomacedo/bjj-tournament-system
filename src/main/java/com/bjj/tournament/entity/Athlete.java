@@ -41,7 +41,14 @@ public class Athlete {
      */
     @Version
     private Long version;
-    
+
+    /**
+     * The organization whose roster this athlete belongs to. Plain scalar
+     * id, not a mapped relationship - see Tournament.organizationId for why.
+     */
+    @Column(name = "organization_id")
+    private Long organizationId;
+
     /**
      * Athlete's full name
      */

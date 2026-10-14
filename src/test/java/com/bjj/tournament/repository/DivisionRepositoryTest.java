@@ -23,6 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DataJpaTest
 class DivisionRepositoryTest {
 
+    private static final Long ORG_ID = 1L;
+
     @Autowired
     private TestEntityManager entityManager;
 
@@ -40,6 +42,7 @@ class DivisionRepositoryTest {
     void setUp() {
         // Create tournament
         tournament = new Tournament();
+        tournament.setOrganizationId(ORG_ID);
         tournament.setName("Test Tournament");
         tournament.setLocation("Los Angeles");
         tournament.setTournamentDate(LocalDate.now().plusDays(30));
@@ -162,7 +165,7 @@ class DivisionRepositoryTest {
     @Test
     void testFindDivisionsReadyForMatchGeneration_ShouldReturnDivisionsWithAtLeastTwoAthletes() {
         // When
-        List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration();
+        List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration(ORG_ID);
 
         // Then
         assertThat(readyDivisions).hasSize(1);
@@ -177,7 +180,7 @@ class DivisionRepositoryTest {
         // Given - division3 has matchesGenerated = true
 
         // When
-        List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration();
+        List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration(ORG_ID);
 
         // Then
         assertThat(readyDivisions).doesNotContain(division3);
@@ -186,7 +189,7 @@ class DivisionRepositoryTest {
     @Test
     void testFindDivisionsReadyForMatchGeneration_ShouldExcludeDivisionsWithNoAthletes() {
         // When
-        List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration();
+        List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration(ORG_ID);
 
         // Then
         assertThat(readyDivisions).doesNotContain(division2); // division2 has 0 athletes
@@ -210,7 +213,7 @@ class DivisionRepositoryTest {
         entityManager.flush();
 
         // When
-        List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration();
+        List<Division> readyDivisions = divisionRepository.findDivisionsReadyForMatchGeneration(ORG_ID);
 
         // Then
         assertThat(readyDivisions).contains(soloDivision);

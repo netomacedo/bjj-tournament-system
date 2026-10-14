@@ -10,6 +10,7 @@ import com.bjj.tournament.exception.AthleteNotFoundException;
 import com.bjj.tournament.repository.AthleteRepository;
 import com.bjj.tournament.repository.DivisionRepository;
 import com.bjj.tournament.repository.MatchRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,10 +32,11 @@ public class AthleteService {
     private final AthleteRepository athleteRepository;
     private final DivisionRepository divisionRepository;
     private final MatchRepository matchRepository;
-    
+    private final OrganizationAccessGuard organizationAccessGuard;
+
     /**
      * Register a new athlete for the tournament
-     * 
+     *
      * @param registrationDTO Athlete registration data
      * @return Registered athlete entity
      */
@@ -42,9 +44,16 @@ public class AthleteService {
     public Athlete registerAthlete(AthleteRegistrationDTO registrationDTO) {
         log.info("Registering new athlete: {}", registrationDTO.getName());
 
-        // Check if athlete already exists by email (only if email is provided)
+        Long organizationId = organizationAccessGuard.currentOrganizationId();
+        if (organizationId == null) {
+            throw new IllegalStateException("A platform admin has no organization to register an athlete in");
+        }
+
+        // Check if athlete already exists by email within this organization
+        // (only if email is provided) - the same email can be registered
+        // independently by two different organizations
         if (registrationDTO.getEmail() != null && !registrationDTO.getEmail().trim().isEmpty()) {
-            if (athleteRepository.existsByEmail(registrationDTO.getEmail())) {
+            if (athleteRepository.existsByOrganizationIdAndEmail(organizationId, registrationDTO.getEmail())) {
                 throw new IllegalArgumentException("Athlete with email " + registrationDTO.getEmail() + " already exists");
             }
         }
@@ -83,6 +92,7 @@ public class AthleteService {
 
         // Create and save athlete
         Athlete athlete = new Athlete();
+        athlete.setOrganizationId(organizationId);
         athlete.setName(registrationDTO.getName());
         athlete.setAge(age);
         athlete.setDateOfBirth(registrationDTO.getDateOfBirth()); // Optional
@@ -106,62 +116,72 @@ public class AthleteService {
      */
     @Transactional(readOnly = true)
     public Athlete getAthleteById(Long id) {
-        return athleteRepository.findById(id)
+        Athlete athlete = athleteRepository.findById(id)
             .orElseThrow(() -> new AthleteNotFoundException("Athlete not found with ID: " + id));
+        organizationAccessGuard.checkAccess(athlete.getOrganizationId());
+        return athlete;
     }
-    
+
     /**
-     * Get all athletes
+     * Get all athletes - every athlete for a platform admin, or just the
+     * caller's own organization's roster otherwise.
      */
     @Transactional(readOnly = true)
     public List<Athlete> getAllAthletes() {
-        return athleteRepository.findAll();
+        if (organizationAccessGuard.isPlatformAdmin()) {
+            return athleteRepository.findAll();
+        }
+        return athleteRepository.findByOrganizationId(organizationAccessGuard.currentOrganizationId());
     }
-    
+
     /**
-     * Find athletes by belt rank
+     * Find athletes by belt rank, scoped to the caller's organization
      */
     @Transactional(readOnly = true)
     public List<Athlete> getAthletesByBeltRank(BeltRank beltRank) {
-        return athleteRepository.findByBeltRank(beltRank);
+        return athleteRepository.findByOrganizationIdAndBeltRank(
+            organizationAccessGuard.currentOrganizationId(), beltRank);
     }
-    
+
     /**
-     * Find athletes by age range
+     * Find athletes by age range, scoped to the caller's organization
      */
     @Transactional(readOnly = true)
     public List<Athlete> getAthletesByAgeRange(Integer minAge, Integer maxAge) {
-        return athleteRepository.findByAgeBetween(minAge, maxAge);
+        return athleteRepository.findByOrganizationIdAndAgeBetween(
+            organizationAccessGuard.currentOrganizationId(), minAge, maxAge);
     }
-    
+
     /**
-     * Find athletes by belt rank, gender, and age range
-     * Used for division creation
+     * Find athletes by belt rank, gender, and age range, scoped to the
+     * caller's organization. Used for division creation.
      */
     @Transactional(readOnly = true)
     public List<Athlete> getAthletesForDivision(BeltRank beltRank, Gender gender, Integer minAge, Integer maxAge) {
+        Long organizationId = organizationAccessGuard.currentOrganizationId();
         if (gender == Gender.NOT_APPLICABLE) {
             // For kids under 10, don't filter by gender
-            return athleteRepository.findByBeltRankAndAgeBetween(beltRank, minAge, maxAge);
+            return athleteRepository.findByOrganizationIdAndBeltRankAndAgeBetween(organizationId, beltRank, minAge, maxAge);
         } else {
-            return athleteRepository.findByBeltRankAndGenderAndAgeBetween(beltRank, gender, minAge, maxAge);
+            return athleteRepository.findByOrganizationIdAndBeltRankAndGenderAndAgeBetween(
+                organizationId, beltRank, gender, minAge, maxAge);
         }
     }
-    
+
     /**
-     * Search athletes by name
+     * Search athletes by name, scoped to the caller's organization
      */
     @Transactional(readOnly = true)
     public List<Athlete> searchAthletesByName(String name) {
-        return athleteRepository.searchByName(name);
+        return athleteRepository.searchByName(organizationAccessGuard.currentOrganizationId(), name);
     }
-    
+
     /**
-     * Find athletes by team
+     * Find athletes by team, scoped to the caller's organization
      */
     @Transactional(readOnly = true)
     public List<Athlete> getAthletesByTeam(String team) {
-        return athleteRepository.findByTeam(team);
+        return athleteRepository.findByOrganizationIdAndTeam(organizationAccessGuard.currentOrganizationId(), team);
     }
     
     /**
@@ -219,6 +239,7 @@ public class AthleteService {
 
         Athlete athlete = athleteRepository.findById(id)
             .orElseThrow(() -> new AthleteNotFoundException("Athlete not found with ID: " + id));
+        organizationAccessGuard.checkAccess(athlete.getOrganizationId());
 
         // Check if athlete has any matches
         List<Match> matches = matchRepository.findMatchesByAthleteId(id);

@@ -3,6 +3,7 @@ package com.bjj.tournament.service;
 import com.bjj.tournament.dto.UserRegistrationDTO;
 import com.bjj.tournament.entity.User;
 import com.bjj.tournament.repository.UserRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,14 +35,21 @@ class UserServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private OrganizationAccessGuard organizationAccessGuard;
+
     @InjectMocks
     private UserService userService;
+
+    private static final Long ORG_ID = 1L;
 
     private User testUser;
     private UserRegistrationDTO registrationDTO;
 
     @BeforeEach
     void setUp() {
+        lenient().when(organizationAccessGuard.currentOrganizationId()).thenReturn(ORG_ID);
+
         testUser = new User();
         testUser.setId(1L);
         testUser.setUsername("testuser");
@@ -235,7 +243,7 @@ class UserServiceTest {
         user2.setUsername("user2");
         user2.setEmail("user2@example.com");
 
-        when(userRepository.findAll()).thenReturn(Arrays.asList(testUser, user2));
+        when(userRepository.findByOrganizationId(ORG_ID)).thenReturn(Arrays.asList(testUser, user2));
 
         // When
         List<User> results = userService.getAllUsers();
@@ -244,7 +252,7 @@ class UserServiceTest {
         assertThat(results).hasSize(2);
         assertThat(results.get(0).getUsername()).isEqualTo("testuser");
         assertThat(results.get(1).getUsername()).isEqualTo("user2");
-        verify(userRepository).findAll();
+        verify(userRepository).findByOrganizationId(ORG_ID);
     }
 
     @Test

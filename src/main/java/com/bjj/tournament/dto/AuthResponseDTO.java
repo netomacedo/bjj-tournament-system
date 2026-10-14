@@ -19,6 +19,7 @@ public class AuthResponseDTO {
     private String email;
     private String fullName;
     private String role;
+    private Long organizationId;
 
     public AuthResponseDTO(String token, Long id, String username, String email, String fullName, String role) {
         this.token = token;

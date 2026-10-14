@@ -68,10 +68,18 @@ public class User implements UserDetails {
     private String fullName;
 
     /**
-     * User role (ROLE_USER, ROLE_ADMIN, etc.)
+     * User role (ROLE_USER, ROLE_ADMIN, ROLE_PLATFORM_ADMIN)
      */
     @Column(nullable = false, length = 20)
     private String role = "ROLE_USER";
+
+    /**
+     * The organization this user belongs to. Null only for a platform
+     * admin, who isn't tied to any single organization. Plain scalar id,
+     * not a mapped relationship - see Tournament.organizationId for why.
+     */
+    @Column(name = "organization_id")
+    private Long organizationId;
 
     /**
      * Account status

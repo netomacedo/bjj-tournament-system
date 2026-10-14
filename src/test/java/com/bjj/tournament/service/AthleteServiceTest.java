@@ -6,6 +6,7 @@ import com.bjj.tournament.enums.BeltRank;
 import com.bjj.tournament.enums.Gender;
 import com.bjj.tournament.exception.AthleteNotFoundException;
 import com.bjj.tournament.repository.AthleteRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,18 +31,25 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 class AthleteServiceTest {
-    
+
+    private static final Long ORG_ID = 1L;
+
     @Mock
     private AthleteRepository athleteRepository;
-    
+
+    @Mock
+    private OrganizationAccessGuard organizationAccessGuard;
+
     @InjectMocks
     private AthleteService athleteService;
-    
+
     private AthleteRegistrationDTO validRegistrationDTO;
     private Athlete savedAthlete;
-    
+
     @BeforeEach
     void setUp() {
+        lenient().when(organizationAccessGuard.currentOrganizationId()).thenReturn(ORG_ID);
+
         validRegistrationDTO = new AthleteRegistrationDTO();
         validRegistrationDTO.setName("Test Athlete");
         validRegistrationDTO.setDateOfBirth(LocalDate.of(1995, 6, 15));
@@ -52,9 +60,10 @@ class AthleteServiceTest {
         validRegistrationDTO.setTeam("Test Team");
         validRegistrationDTO.setCoachName("Test Coach");
         validRegistrationDTO.setPhone("+1234567890");
-        
+
         savedAthlete = new Athlete();
         savedAthlete.setId(1L);
+        savedAthlete.setOrganizationId(ORG_ID);
         savedAthlete.setName("Test Athlete");
         savedAthlete.setDateOfBirth(LocalDate.of(1995, 6, 15));
         savedAthlete.setAge(29);
@@ -63,39 +72,39 @@ class AthleteServiceTest {
         savedAthlete.setWeight(75.0);
         savedAthlete.setEmail("test@example.com");
     }
-    
+
     @Test
     void testRegisterAthlete_WithValidData_ShouldSucceed() {
         // Given
-        when(athleteRepository.existsByEmail(anyString())).thenReturn(false);
+        when(athleteRepository.existsByOrganizationIdAndEmail(ORG_ID, "test@example.com")).thenReturn(false);
         when(athleteRepository.save(any(Athlete.class))).thenReturn(savedAthlete);
-        
+
         // When
         Athlete result = athleteService.registerAthlete(validRegistrationDTO);
-        
+
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("Test Athlete");
-        
-        verify(athleteRepository, times(1)).existsByEmail("test@example.com");
+
+        verify(athleteRepository, times(1)).existsByOrganizationIdAndEmail(ORG_ID, "test@example.com");
         verify(athleteRepository, times(1)).save(any(Athlete.class));
     }
-    
+
     @Test
     void testRegisterAthlete_WithDuplicateEmail_ShouldThrowException() {
         // Given
-        when(athleteRepository.existsByEmail(anyString())).thenReturn(true);
-        
+        when(athleteRepository.existsByOrganizationIdAndEmail(eq(ORG_ID), anyString())).thenReturn(true);
+
         // When/Then
         assertThatThrownBy(() -> athleteService.registerAthlete(validRegistrationDTO))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already exists");
-        
-        verify(athleteRepository, times(1)).existsByEmail("test@example.com");
+
+        verify(athleteRepository, times(1)).existsByOrganizationIdAndEmail(ORG_ID, "test@example.com");
         verify(athleteRepository, never()).save(any(Athlete.class));
     }
-    
+
     @Test
     void testRegisterAthlete_WithKidUnder10_ShouldSetGenderNotApplicable() {
         // Given
@@ -103,7 +112,7 @@ class AthleteServiceTest {
         validRegistrationDTO.setGender(null);
         validRegistrationDTO.setBeltRank(BeltRank.WHITE_GREY); // Kids belt
 
-        when(athleteRepository.existsByEmail(anyString())).thenReturn(false);
+        when(athleteRepository.existsByOrganizationIdAndEmail(eq(ORG_ID), anyString())).thenReturn(false);
         when(athleteRepository.save(any(Athlete.class))).thenAnswer(invocation -> {
             Athlete athlete = invocation.getArgument(0);
             athlete.setId(1L);
@@ -124,173 +133,173 @@ class AthleteServiceTest {
     void testRegisterAthlete_WithAthleteUnder4_ShouldThrowException() {
         // Given
         validRegistrationDTO.setDateOfBirth(LocalDate.now().minusYears(3));
-        when(athleteRepository.existsByEmail(anyString())).thenReturn(false);
-        
+        when(athleteRepository.existsByOrganizationIdAndEmail(eq(ORG_ID), anyString())).thenReturn(false);
+
         // When/Then
         assertThatThrownBy(() -> athleteService.registerAthlete(validRegistrationDTO))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("at least 4 years old");
-        
+
         verify(athleteRepository, never()).save(any(Athlete.class));
     }
-    
+
     @Test
     void testRegisterAthlete_WithKidAndAdultBelt_ShouldThrowException() {
         // Given
         validRegistrationDTO.setDateOfBirth(LocalDate.now().minusYears(12));
         validRegistrationDTO.setBeltRank(BeltRank.PURPLE); // Adult belt for kid
-        when(athleteRepository.existsByEmail(anyString())).thenReturn(false);
-        
+        when(athleteRepository.existsByOrganizationIdAndEmail(eq(ORG_ID), anyString())).thenReturn(false);
+
         // When/Then
         assertThatThrownBy(() -> athleteService.registerAthlete(validRegistrationDTO))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Invalid belt rank for age");
-        
+
         verify(athleteRepository, never()).save(any(Athlete.class));
     }
-    
+
     @Test
     void testGetAthleteById_WhenExists_ShouldReturnAthlete() {
         // Given
         when(athleteRepository.findById(1L)).thenReturn(Optional.of(savedAthlete));
-        
+
         // When
         Athlete result = athleteService.getAthleteById(1L);
-        
+
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(1L);
-        
+
         verify(athleteRepository, times(1)).findById(1L);
     }
-    
+
     @Test
     void testGetAthleteById_WhenNotExists_ShouldThrowException() {
         // Given
         when(athleteRepository.findById(999L)).thenReturn(Optional.empty());
-        
+
         // When/Then
         assertThatThrownBy(() -> athleteService.getAthleteById(999L))
             .isInstanceOf(AthleteNotFoundException.class)
             .hasMessageContaining("not found");
-        
+
         verify(athleteRepository, times(1)).findById(999L);
     }
-    
+
     @Test
     void testGetAllAthletes_ShouldReturnList() {
         // Given
         List<Athlete> athletes = Arrays.asList(savedAthlete, new Athlete());
-        when(athleteRepository.findAll()).thenReturn(athletes);
-        
+        when(athleteRepository.findByOrganizationId(ORG_ID)).thenReturn(athletes);
+
         // When
         List<Athlete> result = athleteService.getAllAthletes();
-        
+
         // Then
         assertThat(result).hasSize(2);
-        
-        verify(athleteRepository, times(1)).findAll();
+
+        verify(athleteRepository, times(1)).findByOrganizationId(ORG_ID);
     }
-    
+
     @Test
     void testGetAthletesByBeltRank_ShouldReturnFilteredList() {
         // Given
         List<Athlete> bluebelts = Arrays.asList(savedAthlete);
-        when(athleteRepository.findByBeltRank(BeltRank.BLUE)).thenReturn(bluebelts);
-        
+        when(athleteRepository.findByOrganizationIdAndBeltRank(ORG_ID, BeltRank.BLUE)).thenReturn(bluebelts);
+
         // When
         List<Athlete> result = athleteService.getAthletesByBeltRank(BeltRank.BLUE);
-        
+
         // Then
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getBeltRank()).isEqualTo(BeltRank.BLUE);
-        
-        verify(athleteRepository, times(1)).findByBeltRank(BeltRank.BLUE);
+
+        verify(athleteRepository, times(1)).findByOrganizationIdAndBeltRank(ORG_ID, BeltRank.BLUE);
     }
-    
+
     @Test
     void testGetAthletesByAgeRange_ShouldReturnFilteredList() {
         // Given
         List<Athlete> athletes = Arrays.asList(savedAthlete);
-        when(athleteRepository.findByAgeBetween(25, 35)).thenReturn(athletes);
-        
+        when(athleteRepository.findByOrganizationIdAndAgeBetween(ORG_ID, 25, 35)).thenReturn(athletes);
+
         // When
         List<Athlete> result = athleteService.getAthletesByAgeRange(25, 35);
-        
+
         // Then
         assertThat(result).hasSize(1);
-        
-        verify(athleteRepository, times(1)).findByAgeBetween(25, 35);
+
+        verify(athleteRepository, times(1)).findByOrganizationIdAndAgeBetween(ORG_ID, 25, 35);
     }
-    
+
     @Test
     void testGetAthletesForDivision_WithGenderNotApplicable_ShouldNotFilterByGender() {
         // Given
         List<Athlete> athletes = Arrays.asList(savedAthlete);
-        when(athleteRepository.findByBeltRankAndAgeBetween(
-            BeltRank.GREY, 4, 9)).thenReturn(athletes);
-        
+        when(athleteRepository.findByOrganizationIdAndBeltRankAndAgeBetween(
+            ORG_ID, BeltRank.GREY, 4, 9)).thenReturn(athletes);
+
         // When
         List<Athlete> result = athleteService.getAthletesForDivision(
             BeltRank.GREY, Gender.NOT_APPLICABLE, 4, 9);
-        
+
         // Then
         assertThat(result).hasSize(1);
-        
+
         verify(athleteRepository, times(1))
-            .findByBeltRankAndAgeBetween(BeltRank.GREY, 4, 9);
+            .findByOrganizationIdAndBeltRankAndAgeBetween(ORG_ID, BeltRank.GREY, 4, 9);
         verify(athleteRepository, never())
-            .findByBeltRankAndGenderAndAgeBetween(any(), any(), anyInt(), anyInt());
+            .findByOrganizationIdAndBeltRankAndGenderAndAgeBetween(any(), any(), any(), anyInt(), anyInt());
     }
-    
+
     @Test
     void testGetAthletesForDivision_WithGender_ShouldFilterByGender() {
         // Given
         List<Athlete> athletes = Arrays.asList(savedAthlete);
-        when(athleteRepository.findByBeltRankAndGenderAndAgeBetween(
-            BeltRank.BLUE, Gender.MALE, 18, 29)).thenReturn(athletes);
-        
+        when(athleteRepository.findByOrganizationIdAndBeltRankAndGenderAndAgeBetween(
+            ORG_ID, BeltRank.BLUE, Gender.MALE, 18, 29)).thenReturn(athletes);
+
         // When
         List<Athlete> result = athleteService.getAthletesForDivision(
             BeltRank.BLUE, Gender.MALE, 18, 29);
-        
+
         // Then
         assertThat(result).hasSize(1);
-        
+
         verify(athleteRepository, times(1))
-            .findByBeltRankAndGenderAndAgeBetween(BeltRank.BLUE, Gender.MALE, 18, 29);
+            .findByOrganizationIdAndBeltRankAndGenderAndAgeBetween(ORG_ID, BeltRank.BLUE, Gender.MALE, 18, 29);
     }
-    
+
     @Test
     void testSearchAthletesByName_ShouldReturnResults() {
         // Given
         List<Athlete> athletes = Arrays.asList(savedAthlete);
-        when(athleteRepository.searchByName("Test")).thenReturn(athletes);
-        
+        when(athleteRepository.searchByName(ORG_ID, "Test")).thenReturn(athletes);
+
         // When
         List<Athlete> result = athleteService.searchAthletesByName("Test");
-        
+
         // Then
         assertThat(result).hasSize(1);
-        
-        verify(athleteRepository, times(1)).searchByName("Test");
+
+        verify(athleteRepository, times(1)).searchByName(ORG_ID, "Test");
     }
-    
+
     @Test
     void testGetAthletesByTeam_ShouldReturnTeamMembers() {
         // Given
         List<Athlete> athletes = Arrays.asList(savedAthlete);
-        when(athleteRepository.findByTeam("Test Team")).thenReturn(athletes);
-        
+        when(athleteRepository.findByOrganizationIdAndTeam(ORG_ID, "Test Team")).thenReturn(athletes);
+
         // When
         List<Athlete> result = athleteService.getAthletesByTeam("Test Team");
-        
+
         // Then
         assertThat(result).hasSize(1);
-        
-        verify(athleteRepository, times(1)).findByTeam("Test Team");
+
+        verify(athleteRepository, times(1)).findByOrganizationIdAndTeam(ORG_ID, "Test Team");
     }
-    
+
     @Test
     void testUpdateAthlete_WithValidData_ShouldSucceed() {
         // Given

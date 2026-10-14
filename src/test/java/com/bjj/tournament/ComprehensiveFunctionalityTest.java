@@ -8,6 +8,8 @@ import com.bjj.tournament.service.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
@@ -59,6 +61,23 @@ class ComprehensiveFunctionalityTest {
         divisionRepository.deleteAll();
         athleteRepository.deleteAll();
         tournamentRepository.deleteAll();
+
+        // These tests call the services directly (not through a real HTTP
+        // request), so there's no JwtAuthenticationFilter to populate the
+        // Spring Security principal that OrganizationAccessGuard reads -
+        // push a fake authenticated org-admin in instead.
+        User currentUser = new User();
+        currentUser.setId(1L);
+        currentUser.setUsername("test-admin");
+        currentUser.setRole("ROLE_ADMIN");
+        currentUser.setOrganizationId(1L);
+        SecurityContextHolder.getContext().setAuthentication(
+            new UsernamePasswordAuthenticationToken(currentUser, null, currentUser.getAuthorities()));
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     // ==================== TOURNAMENT TESTS ====================
@@ -426,6 +445,12 @@ class ComprehensiveFunctionalityTest {
 
     private Athlete createTestAthlete(String name, String email) {
         Athlete athlete = new Athlete();
+        // This helper bypasses AthleteService (which would normally stamp
+        // the organization from the authenticated caller), so it must be
+        // set explicitly here to match the fake org-admin pushed into the
+        // security context in setUp() - otherwise enrollAthlete's cross-org
+        // check rejects it as belonging to no organization at all.
+        athlete.setOrganizationId(1L);
         athlete.setName(name);
         athlete.setEmail(email);
         athlete.setDateOfBirth(LocalDate.now().minusYears(25));

@@ -3,6 +3,7 @@ package com.bjj.tournament.service;
 import com.bjj.tournament.dto.TournamentCreateDTO;
 import com.bjj.tournament.entity.Tournament;
 import com.bjj.tournament.repository.TournamentRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,18 +26,25 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 class TournamentServiceTest {
-    
+
+    private static final Long ORG_ID = 1L;
+
     @Mock
     private TournamentRepository tournamentRepository;
-    
+
+    @Mock
+    private OrganizationAccessGuard organizationAccessGuard;
+
     @InjectMocks
     private TournamentService tournamentService;
-    
+
     private TournamentCreateDTO validTournamentDTO;
     private Tournament savedTournament;
-    
+
     @BeforeEach
     void setUp() {
+        lenient().when(organizationAccessGuard.currentOrganizationId()).thenReturn(ORG_ID);
+
         validTournamentDTO = new TournamentCreateDTO();
         validTournamentDTO.setName("Test Tournament");
         validTournamentDTO.setLocation("Test Arena");
@@ -47,6 +55,7 @@ class TournamentServiceTest {
         
         savedTournament = new Tournament();
         savedTournament.setId(1L);
+        savedTournament.setOrganizationId(ORG_ID);
         savedTournament.setName("Test Tournament");
         savedTournament.setLocation("Test Arena");
         savedTournament.setTournamentDate(LocalDate.now().plusMonths(2));
@@ -130,32 +139,32 @@ class TournamentServiceTest {
     void testGetAllTournaments_ShouldReturnList() {
         // Given
         List<Tournament> tournaments = Arrays.asList(savedTournament, new Tournament());
-        when(tournamentRepository.findAll()).thenReturn(tournaments);
-        
+        when(tournamentRepository.findByOrganizationId(ORG_ID)).thenReturn(tournaments);
+
         // When
         List<Tournament> result = tournamentService.getAllTournaments();
-        
+
         // Then
         assertThat(result).hasSize(2);
-        
-        verify(tournamentRepository, times(1)).findAll();
+
+        verify(tournamentRepository, times(1)).findByOrganizationId(ORG_ID);
     }
-    
+
     @Test
     void testGetUpcomingTournaments_ShouldReturnList() {
         // Given
         List<Tournament> tournaments = Arrays.asList(savedTournament);
-        when(tournamentRepository.findUpcomingTournaments(any(LocalDate.class)))
+        when(tournamentRepository.findUpcomingTournaments(eq(ORG_ID), any(LocalDate.class)))
             .thenReturn(tournaments);
-        
+
         // When
         List<Tournament> result = tournamentService.getUpcomingTournaments();
-        
+
         // Then
         assertThat(result).hasSize(1);
-        
+
         verify(tournamentRepository, times(1))
-            .findUpcomingTournaments(any(LocalDate.class));
+            .findUpcomingTournaments(eq(ORG_ID), any(LocalDate.class));
     }
     
     @Test

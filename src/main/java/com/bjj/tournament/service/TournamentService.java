@@ -3,6 +3,7 @@ package com.bjj.tournament.service;
 import com.bjj.tournament.dto.TournamentCreateDTO;
 import com.bjj.tournament.entity.Tournament;
 import com.bjj.tournament.repository.TournamentRepository;
+import com.bjj.tournament.security.OrganizationAccessGuard;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,26 +24,33 @@ public class TournamentService {
 
     private final TournamentRepository tournamentRepository;
     private final EntityManager entityManager;
-    
+    private final OrganizationAccessGuard organizationAccessGuard;
+
     /**
      * Create a new tournament
      */
     @Transactional
     public Tournament createTournament(TournamentCreateDTO createDTO) {
         log.info("Creating new tournament: {}", createDTO.getName());
-        
+
+        Long organizationId = organizationAccessGuard.currentOrganizationId();
+        if (organizationId == null) {
+            throw new IllegalStateException("A platform admin has no organization to create a tournament in");
+        }
+
         // Validate tournament date is in the future
         if (createDTO.getTournamentDate().isBefore(LocalDate.now())) {
             throw new IllegalArgumentException("Tournament date must be in the future");
         }
-        
+
         // Validate registration deadline if provided
-        if (createDTO.getRegistrationDeadline() != null && 
+        if (createDTO.getRegistrationDeadline() != null &&
             createDTO.getRegistrationDeadline().isAfter(createDTO.getTournamentDate())) {
             throw new IllegalArgumentException("Registration deadline must be before tournament date");
         }
-        
+
         Tournament tournament = new Tournament();
+        tournament.setOrganizationId(organizationId);
         tournament.setName(createDTO.getName());
         tournament.setDescription(createDTO.getDescription());
         tournament.setLocation(createDTO.getLocation());
@@ -67,6 +75,7 @@ public class TournamentService {
 
         Tournament tournament = tournamentRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Tournament not found with ID: " + id));
+        organizationAccessGuard.checkAccess(tournament.getOrganizationId());
 
         if (updateDTO.getTournamentDate().isBefore(LocalDate.now())) {
             throw new IllegalArgumentException("Tournament date must be in the future");
@@ -97,32 +106,40 @@ public class TournamentService {
      */
     @Transactional(readOnly = true)
     public Tournament getTournamentById(Long id) {
-        return tournamentRepository.findById(id)
+        Tournament tournament = tournamentRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Tournament not found with ID: " + id));
+        organizationAccessGuard.checkAccess(tournament.getOrganizationId());
+        return tournament;
     }
-    
+
     /**
-     * Get all tournaments
+     * Get all tournaments - every tournament for a platform admin, or just
+     * the caller's own organization's otherwise.
      */
     @Transactional(readOnly = true)
     public List<Tournament> getAllTournaments() {
-        return tournamentRepository.findAll();
+        if (organizationAccessGuard.isPlatformAdmin()) {
+            return tournamentRepository.findAll();
+        }
+        return tournamentRepository.findByOrganizationId(organizationAccessGuard.currentOrganizationId());
     }
-    
+
     /**
-     * Get upcoming tournaments
+     * Get upcoming tournaments, scoped to the caller's organization
      */
     @Transactional(readOnly = true)
     public List<Tournament> getUpcomingTournaments() {
-        return tournamentRepository.findUpcomingTournaments(LocalDate.now());
+        return tournamentRepository.findUpcomingTournaments(
+            organizationAccessGuard.currentOrganizationId(), LocalDate.now());
     }
-    
+
     /**
-     * Get tournaments with open registration
+     * Get tournaments with open registration, scoped to the caller's organization
      */
     @Transactional(readOnly = true)
     public List<Tournament> getTournamentsWithOpenRegistration() {
-        return tournamentRepository.findByRegistrationOpen(true);
+        return tournamentRepository.findByOrganizationIdAndRegistrationOpen(
+            organizationAccessGuard.currentOrganizationId(), true);
     }
     
     /**
@@ -199,6 +216,7 @@ public class TournamentService {
 
         Tournament tournament = tournamentRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Tournament not found with ID: " + id));
+        organizationAccessGuard.checkAccess(tournament.getOrganizationId());
 
         log.info("Tournament found: {}", tournament.getName());
 
