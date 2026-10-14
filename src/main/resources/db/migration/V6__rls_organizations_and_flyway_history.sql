@@ -1,14 +1,21 @@
 -- ============================================================
 -- Supabase Advisor: "RLS Disabled in Public" (CRITICAL) on
--- organizations and flyway_schema_history.
+-- organizations.
 --
 -- Same fix and reasoning as V2: this app never uses Supabase's
 -- PostgREST API, so enabling RLS with no policies just blocks
--- the anon/authenticated API roles from touching these tables,
+-- the anon/authenticated API roles from touching this table,
 -- while the app's own direct JDBC connection (as table owner)
 -- is unaffected. organizations was added in V4, after V2's pass,
--- so it was missed; flyway_schema_history was never covered.
+-- so it was the one table missed.
+--
+-- flyway_schema_history is deliberately NOT touched here: it's
+-- Flyway's own bookkeeping table, actively read/locked by Flyway
+-- itself while a migration is running, which caused exactly that
+-- statement to time out waiting on a lock in the first version of
+-- this migration (rolling back the whole transaction, including
+-- the organizations fix below, since Postgres DDL is transactional).
+-- It holds no sensitive data, so it's not worth touching via Flyway.
 -- ============================================================
 
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.flyway_schema_history ENABLE ROW LEVEL SECURITY;
