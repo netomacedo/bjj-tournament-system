@@ -244,6 +244,20 @@ public class AuthController {
     }
 
     /**
+     * Admin-initiated password reset for another user (e.g. a forgotten
+     * password, with no self-service email flow yet). Open to ROLE_ADMIN
+     * and ROLE_PLATFORM_ADMIN only (enforced in SecurityConfig); the actual
+     * cross-org guard happens inside UserService.getUserById.
+     * PUT /api/auth/users/{id}/reset-password
+     */
+    @PutMapping("/users/{id}/reset-password")
+    public ResponseEntity<?> adminResetPassword(@PathVariable Long id,
+                                                 @Valid @RequestBody AdminResetPasswordRequest request) {
+        userService.adminResetPassword(id, request.newPassword());
+        return ResponseEntity.ok(new MessageResponse("Password reset successfully"));
+    }
+
+    /**
      * User info response (no password)
      */
     record UserInfo(Long id, String username, String email, String fullName, String role, Boolean enabled, Long organizationId) {}
@@ -253,6 +267,15 @@ public class AuthController {
      */
     record ChangePasswordRequest(
         @jakarta.validation.constraints.NotBlank(message = "Current password is required") String currentPassword,
+        @jakarta.validation.constraints.NotBlank(message = "New password is required")
+        @jakarta.validation.constraints.Size(min = 6, max = 100, message = "New password must be between 6 and 100 characters")
+        String newPassword
+    ) {}
+
+    /**
+     * Admin password-reset request (no current password needed)
+     */
+    record AdminResetPasswordRequest(
         @jakarta.validation.constraints.NotBlank(message = "New password is required")
         @jakarta.validation.constraints.Size(min = 6, max = 100, message = "New password must be between 6 and 100 characters")
         String newPassword

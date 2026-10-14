@@ -149,6 +149,22 @@ public class UserService {
     }
 
     /**
+     * Admin-initiated password reset - unlike changePassword, this does not
+     * require knowing the current password, since the caller is an admin
+     * resetting someone else's forgotten password, not the user themselves.
+     * getUserById's ownership check already ensures an org admin can only
+     * reset users within their own organization; a platform admin can reset
+     * anyone's.
+     */
+    @Transactional
+    public void adminResetPassword(Long userId, String newPassword) {
+        User user = getUserById(userId);
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        log.info("Password reset by admin for user ID: {}", userId);
+    }
+
+    /**
      * Enable or disable user account (admin only)
      */
     @Transactional

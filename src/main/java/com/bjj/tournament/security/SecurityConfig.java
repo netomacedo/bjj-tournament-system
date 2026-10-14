@@ -55,9 +55,12 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Account creation and user listing require an existing admin -
                         // self-registration is intentionally not public (must come before
-                        // the broader /api/auth/** permitAll rule below to take effect)
+                        // the broader /api/auth/** permitAll rule below to take effect).
+                        // Both "all users" and password reset also allow the platform
+                        // admin, since UserService already serves/scopes those for them.
                         .requestMatchers("/api/auth/register").hasRole("ADMIN")
-                        .requestMatchers("/api/auth/users/all").hasRole("ADMIN")
+                        .requestMatchers("/api/auth/users/all").hasAnyRole("ADMIN", "PLATFORM_ADMIN")
+                        .requestMatchers("/api/auth/users/*/reset-password").hasAnyRole("ADMIN", "PLATFORM_ADMIN")
 
                         // Public endpoints - no authentication required
                         .requestMatchers("/api/auth/**").permitAll()
